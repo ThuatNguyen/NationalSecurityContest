@@ -1,0 +1,214 @@
+Hãy xây dựng một ứng dụng web chấm điểm thi đua “Vì An ninh Tổ quốc” trong Công an nhân dân, phục vụ công tác quản lý, tự chấm điểm, chấm điểm cụm và tổng hợp kết quả thi đua.
+
+Ứng dụng gồm frontend viết bằng ReactJS và backend viết bằng ExpressJS (Node.js), kết nối cơ sở dữ liệu PostgreSQL.
+
+*Hệ thống có 3 quyền người dùng chính:
+
++ Admin (Quản trị viên)
+
++ Cụm trưởng (Cluster Leader)
+
++ Đơn vị (User)
+
+* Mục tiêu
++ Tin học hóa quy trình chấm điểm phong trào thi đua “Vì An ninh Tổ quốc”.
+
++ Đảm bảo tính chính xác, minh bạch, dễ tổng hợp, và có thể mở rộng qua các năm.
+
++ Hỗ trợ nhiều bộ tiêu chí khác nhau cho từng cụm thi đua. Cấu trúc thi đua
+
+*Hệ thống chia thành cac cụm thi đua chính, mỗi cụm có tiêu chí riêng: vi du
+
+Cụm 1: Công an xã, phường, đặc khu.
+
+Cụm 2: Các phòng An ninh nhân dân.
+
+Cụm 3: Các phòng Cảnh sát điều tra.
+
+Cụm 4: Các phòng Quản lý hành chính.
+
+Cụm 5: Các phòng Xây dựng lực lượng, Trực thuộc, Hậu cần.
+*Lưu ý:
+
++ Mỗi cụm có bộ tiêu chí thi đua riêng biệt, được quản lý bởi Admin.
+
++ Khi người dùng truy cập trang chấm điểm, hệ thống tự lọc và hiển thị danh sách tiêu chí phù hợp với cụm của đơn vị hoặc cụm trưởng.
+
+*Phân quyền và chức năng
+1. Quản trị viên (Admin)
+
+Chức năng chính:
+
+Quản lý danh mục:
+
+Tạo / sửa / xóa đơn vị, cụm thi đua, người dùng.
+
+Quản lý bộ tiêu chí và nhóm tiêu chí, bao gồm:
+
+Gán tiêu chí cho từng cụm thi đua.
+
+Cấu hình điểm tối đa, mô tả chi tiết, năm áp dụng.
+
+Quản lý kỳ thi đua (theo năm).
+
+Theo dõi kết quả chấm điểm của tất cả cụm và đơn vị.
+
+Duyệt và xuất báo cáo tổng hợp toàn lực lượng (Excel/PDF).
+
+Cấu hình, khóa/sửa kỳ chấm điểm khi đã kết thúc.
+
+2. Cụm trưởng
+
+Chức năng chính:
+
+Xem danh sách đơn vị thuộc cụm của mình.
+
+Xem điểm tự chấm của các đơn vị.
+
+Nhập và lưu điểm cụm chấm và nhận xét cho từng tiêu chí.
+
+Xem tổng hợp điểm cụm, báo cáo xếp hạng.
+
+Không được thay đổi tiêu chí, chỉ chấm điểm trong cụm được phân công.
+
+ 3. Đơn vị (User)
+
+Chức năng chính:
+
+Xem danh sách tiêu chí thi đua của cụm mình (hệ thống tự lọc theo cluster_id).
+
+Nhập và lưu điểm tự chấm theo từng tiêu chí.
+
+Gửi kết quả tự chấm để cụm trưởng chấm.
+
+Xem điểm cụm chấm và điểm duyệt cuối cùng (chỉ đọc).
+
+Quy tắc truy cập dữ liệu
+
+Admin: xem, sửa, cấu hình mọi dữ liệu (tất cả cụm và đơn vị).
+
+Cụm trưởng: chỉ xem và chấm điểm các đơn vị có cluster_id trùng với cụm mình.
+
+User: chỉ xem và chấm điểm của đơn vị có unit_id trùng với tài khoản.
+
+Mô hình dữ liệu (gợi ý)
+users
+  - id, name, username, password_hash
+  - role_id (admin / cluster_leader / user)
+  - unit_id, cluster_id, is_active
+
+roles
+  - id, name
+
+clusters
+  - id, name, description
+
+units
+  - id, name, cluster_id
+
+criteria_groups
+  - id, name, year, cluster_id
+
+criteria
+  - id, group_id, cluster_id, name, description, max_score
+
+evaluation_periods
+  - id, year, start_date, end_date, is_active
+
+scores
+  - id, user_id, unit_id, cluster_id, criteria_id, 
+    self_score, cluster_score, approved_score, comment, period_id
+
+audit_logs
+  - id, user_id, action, timestamp
+
+
+Mỗi tiêu chí liên kết với cụm thi đua (cluster_id), đảm bảo khi truy vấn hiển thị chấm điểm, hệ thống chỉ hiển thị đúng bộ tiêu chí của cụm tương ứng.
+
+Hiển thị bảng chấm điểm
+
+Dạng bảng hiển thị thống nhất cho cả ba vai trò, với mức độ thao tác khác nhau:
+
+STT	Nhóm tiêu chí	Tiêu chí cụ thể	Điểm tối đa	Tự chấm	Cụm chấm	Điểm duyệt	Nhận xét
+
+Phân quyền thao tác trên bảng:
+
+User (Đơn vị): chỉ nhập “Tự chấm”.
+
+Cụm trưởng: xem “Tự chấm”, nhập “Cụm chấm” và “Nhận xét”.
+
+Admin: xem tất cả, có thể nhập hoặc duyệt “Điểm cuối cùng”.
+
+Bộ lọc hiển thị:
+
+Admin: chọn năm, cụm, đơn vị, trạng thái kỳ thi đua.
+
+Cụm trưởng: chỉ lọc theo đơn vị trong cụm.
+
+User: chỉ lọc theo kỳ thi đua của đơn vị mình.
+
+Khi chọn cụm, hệ thống lọc tiêu chí theo cụm_id.
+
+Yêu cầu kỹ thuật
+
+Frontend:
+
+ReactJS + TailwindCSS
+
+React Query hoặc Axios (API call)
+
+React Router DOM (routing theo quyền người dùng)
+
+State quản lý quyền & user (Context API / Redux Toolkit)
+
+Backend:
+
+ExpressJS + JWT Authentication
+
+ORM: Sequelize hoặc Prisma
+
+Middleware kiểm tra quyền truy cập (role và cluster_id)
+
+Cấu trúc RESTful API:
+
+/auth – đăng nhập, đăng xuất
+
+/users – quản lý người dùng
+
+/clusters – quản lý cụm
+
+/criteria – tiêu chí theo cụm
+
+/scores – ghi nhận điểm chấm
+
+/reports – tổng hợp, xuất file
+
+Database: PostgreSQL
+Triển khai: Docker Compose (frontend + backend + db)
+
+Mục tiêu cuối cùng
+
+Hệ thống hỗ trợ chấm điểm và tổng hợp thi đua điện tử thay thế thủ công.
+
+Cho phép Admin cấu hình tiêu chí riêng theo từng cụm.
+
+Giao diện đơn giản, dễ sử dụng, bảo mật và có khả năng mở rộng.
+
+Kết quả có thể xuất báo cáo theo cụm, theo đơn vị, hoặc toàn lực lượng.
+
+Yêu cầu đầu ra khi AI hoặc Dev thực thi prompt:
+
+Sinh cấu trúc dự án đầy đủ gồm:
+
+frontend/ (ReactJS)
+
+backend/ (ExpressJS)
+
+Định nghĩa API chính và mô hình dữ liệu.
+
+Xây dựng sẵn giao diện 3 vai trò (Admin / Cụm trưởng / User).
+
+Cơ chế lọc tiêu chí theo cluster_id trong giao diện chấm điểm.
+
+Trang tổng hợp báo cáo và export kết quả.
+2 file anh la he thong cham diem cai cach hanh chinh

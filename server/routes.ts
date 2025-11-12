@@ -535,8 +535,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Evaluation Period routes
   app.get("/api/evaluation-periods", requireAuth, async (req, res, next) => {
     try {
-      const { clusterId } = req.query;
-      const periods = await storage.getEvaluationPeriods(clusterId as string | undefined);
+      // Admin sees all periods, others only see their cluster's periods
+      let clusterId = req.query.clusterId as string | undefined;
+      
+      if (req.user!.role !== "admin") {
+        // Force non-admin users to only see their cluster's periods
+        clusterId = req.user!.clusterId || undefined;
+        if (!clusterId) {
+          return res.status(403).json({ message: "Bạn chưa được gán vào cụm thi đua nào" });
+        }
+      }
+      
+      const periods = await storage.getEvaluationPeriods(clusterId);
       res.json(periods);
     } catch (error) {
       next(error);
@@ -549,6 +559,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!period) {
         return res.status(404).json({ message: "Không tìm thấy kỳ thi đua" });
       }
+      
+      // Non-admin users can only view periods from their cluster
+      if (req.user!.role !== "admin" && period.clusterId !== req.user!.clusterId) {
+        return res.status(403).json({ message: "Bạn chỉ có thể xem kỳ thi đua của cụm mình" });
+      }
+      
       res.json(period);
     } catch (error) {
       next(error);
@@ -626,7 +642,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/evaluations", requireAuth, async (req, res, next) => {
     try {
       const { periodId, unitId } = req.query;
-      const evaluations = await storage.getEvaluations(periodId as string | undefined, unitId as string | undefined);
+      let evaluations = await storage.getEvaluations(periodId as string | undefined, unitId as string | undefined);
+      
+      // Filter evaluations based on user role and cluster ownership
+      if (req.user!.role !== "admin") {
+        // Fetch all units for evaluations to filter by cluster
+        const evaluationsWithUnits = await Promise.all(
+          evaluations.map(async (evaluation) => {
+            const unit = await storage.getUnit(evaluation.unitId);
+            return { evaluation, unit };
+          })
+        );
+        
+        evaluations = evaluationsWithUnits
+          .filter(({ evaluation, unit }) => {
+            if (!unit) return false;
+            
+            // Cluster leaders can see all evaluations in their cluster
+            if (req.user!.role === "cluster_leader") {
+              return unit.clusterId === req.user!.clusterId;
+            }
+            
+            // Regular users can only see their own unit's evaluations
+            return evaluation.unitId === req.user!.unitId;
+          })
+          .map(({ evaluation }) => evaluation);
+      }
+      
       res.json(evaluations);
     } catch (error) {
       next(error);
@@ -639,6 +681,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!evaluation) {
         return res.status(404).json({ message: "Không tìm thấy đánh giá" });
       }
+      
+      // Verify access based on role and ownership
+      const unit = await storage.getUnit(evaluation.unitId);
+      if (!unit) {
+        return res.status(404).json({ message: "Không tìm thấy đơn vị" });
+      }
+      
+      if (req.user!.role !== "admin") {
+        if (req.user!.role === "cluster_leader" && unit.clusterId !== req.user!.clusterId) {
+          return res.status(403).json({ message: "Bạn chỉ có thể xem đánh giá của cụm mình" });
+        }
+        
+        if (req.user!.role === "user" && evaluation.unitId !== req.user!.unitId) {
+          return res.status(403).json({ message: "Bạn chỉ có thể xem đánh giá của đơn vị mình" });
+        }
+      }
+      
       res.json(evaluation);
     } catch (error) {
       next(error);
@@ -722,6 +781,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!evaluationId) {
         return res.status(400).json({ message: "Thiếu evaluationId" });
       }
+      
+      // Verify evaluation exists and check access
+      const evaluation = await storage.getEvaluation(evaluationId as string);
+      if (!evaluation) {
+        return res.status(404).json({ message: "Không tìm thấy đánh giá" });
+      }
+      
+      // Check cluster ownership
+      const unit = await storage.getUnit(evaluation.unitId);
+      if (!unit) {
+        return res.status(404).json({ message: "Không tìm thấy đơn vị" });
+      }
+      
+      if (req.user!.role !== "admin") {
+        if (req.user!.role === "cluster_leader" && unit.clusterId !== req.user!.clusterId) {
+          return res.status(403).json({ message: "Bạn chỉ có thể xem điểm của cụm mình" });
+        }
+        
+        if (req.user!.role === "user" && evaluation.unitId !== req.user!.unitId) {
+          return res.status(403).json({ message: "Bạn chỉ có thể xem điểm của đơn vị mình" });
+        }
+      }
+      
       const scores = await storage.getScores(evaluationId as string);
       res.json(scores);
     } catch (error) {
@@ -735,6 +817,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!score) {
         return res.status(404).json({ message: "Không tìm thấy điểm" });
       }
+      
+      // Get the evaluation to check permissions
+      const evaluation = await storage.getEvaluation(score.evaluationId);
+      if (!evaluation) {
+        return res.status(404).json({ message: "Không tìm thấy đánh giá" });
+      }
+      
+      // Check cluster ownership
+      const unit = await storage.getUnit(evaluation.unitId);
+      if (!unit) {
+        return res.status(404).json({ message: "Không tìm thấy đơn vị" });
+      }
+      
+      if (req.user!.role !== "admin") {
+        if (req.user!.role === "cluster_leader" && unit.clusterId !== req.user!.clusterId) {
+          return res.status(403).json({ message: "Bạn chỉ có thể xem điểm của cụm mình" });
+        }
+        
+        if (req.user!.role === "user" && evaluation.unitId !== req.user!.unitId) {
+          return res.status(403).json({ message: "Bạn chỉ có thể xem điểm của đơn vị mình" });
+        }
+      }
+      
       res.json(score);
     } catch (error) {
       next(error);

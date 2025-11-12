@@ -1,69 +1,81 @@
-import ManagementTable from "@/components/ManagementTable";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Edit, Trash2, Plus } from "lucide-react";
+import { useState } from "react";
+
+interface Criteria {
+  id: number;
+  groupName: string;
+  name: string;
+  maxScore: number;
+}
 
 export default function CriteriaManagement() {
-  const mockCriteria = [
+  const [mockCriteria] = useState<Criteria[]>([
     { 
       id: 1, 
       groupName: "I. CÔNG TÁC XÂY DỰNG ĐẢNG",
-      name: "Chấp hành chủ trương, đường lối của Đảng",
-      cluster: "Tất cả cụm",
+      name: "Chấp hành chủ trương, đường lối của Đảng, chính sách pháp luật của Nhà nước",
       maxScore: 1.0,
-      year: 2025,
-      status: "active"
     },
     { 
       id: 2, 
       groupName: "I. CÔNG TÁC XÂY DỰNG ĐẢNG",
-      name: "Thực hiện Nghị quyết, Chỉ thị của cấp ủy",
-      cluster: "Tất cả cụm",
+      name: "Thực hiện Nghị quyết, Chỉ thị của cấp ủy, chính quyền địa phương",
       maxScore: 1.0,
-      year: 2025,
-      status: "active"
     },
     { 
       id: 3, 
-      groupName: "II. CÔNG TÁC AN NINH TRẬT TỰ",
-      name: "Đảm bảo an ninh chính trị nội bộ",
-      cluster: "Cụm 1",
+      groupName: "I. CÔNG TÁC XÂY DỰNG ĐẢNG",
+      name: "Kết quả thực hiện chức năng tham mưu với cấp ủy, chính quyền địa phương",
       maxScore: 2.0,
-      year: 2025,
-      status: "active"
     },
     { 
       id: 4, 
       groupName: "II. CÔNG TÁC AN NINH TRẬT TỰ",
-      name: "Phòng, chống tội phạm và vi phạm pháp luật",
-      cluster: "Cụm 1",
+      name: "Đảm bảo an ninh chính trị nội bộ, phát hiện xử lý vi phạm",
+      maxScore: 2.0,
+    },
+    { 
+      id: 5, 
+      groupName: "II. CÔNG TÁC AN NINH TRẬT TỰ",
+      name: "Phòng, chống tội phạm và vi phạm pháp luật trên địa bàn",
       maxScore: 3.0,
-      year: 2025,
-      status: "active"
     },
-  ];
+    { 
+      id: 6, 
+      groupName: "II. CÔNG TÁC AN NINH TRẬT TỰ",
+      name: "Công tác quản lý hành chính về trật tự xã hội",
+      maxScore: 2.0,
+    },
+    { 
+      id: 7, 
+      groupName: "III. CÔNG TÁC XÂY DỰNG LỰC LƯỢNG",
+      name: "Xây dựng lực lượng trong sạch, vững mạnh toàn diện",
+      maxScore: 2.0,
+    },
+    { 
+      id: 8, 
+      groupName: "III. CÔNG TÁC XÂY DỰNG LỰC LƯỢNG",
+      name: "Công tác đào tạo, bồi dưỡng nâng cao trình độ cán bộ",
+      maxScore: 1.0,
+    },
+  ]);
 
-  const columns = [
-    { key: "groupName", label: "Nhóm tiêu chí", width: "min-w-[200px]" },
-    { key: "name", label: "Tiêu chí", width: "min-w-[250px]" },
-    { key: "cluster", label: "Áp dụng cho cụm", width: "min-w-[150px]" },
-    { 
-      key: "maxScore", 
-      label: "Điểm tối đa",
-      render: (val: number) => <span className="font-medium">{val.toFixed(1)}</span>
-    },
-    { key: "year", label: "Năm" },
-    { 
-      key: "status", 
-      label: "Trạng thái",
-      render: (val: string) => (
-        <Badge variant={val === "active" ? "default" : "secondary"}>
-          {val === "active" ? "Đang áp dụng" : "Ngưng áp dụng"}
-        </Badge>
-      )
-    },
-  ];
+  const groupedCriteria = mockCriteria.reduce((acc, criteria) => {
+    if (!acc[criteria.groupName]) {
+      acc[criteria.groupName] = [];
+    }
+    acc[criteria.groupName].push(criteria);
+    return acc;
+  }, {} as Record<string, Criteria[]>);
+
+  const calculateGroupTotal = (items: Criteria[]) => {
+    return items.reduce((sum, item) => sum + item.maxScore, 0);
+  };
 
   return (
     <div className="space-y-6">
@@ -92,31 +104,113 @@ export default function CriteriaManagement() {
             <Label htmlFor="filter-cluster-criteria" className="text-xs font-semibold uppercase tracking-wide mb-2 block">
               Cụm thi đua
             </Label>
-            <Select defaultValue="all">
+            <Select defaultValue="1">
               <SelectTrigger id="filter-cluster-criteria" data-testid="select-cluster-criteria">
                 <SelectValue placeholder="Chọn cụm" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Tất cả cụm</SelectItem>
-                <SelectItem value="1">Cụm 1</SelectItem>
-                <SelectItem value="2">Cụm 2</SelectItem>
-                <SelectItem value="3">Cụm 3</SelectItem>
+                <SelectItem value="1">Cụm 1: Công an xã, phường</SelectItem>
+                <SelectItem value="2">Cụm 2: An ninh nhân dân</SelectItem>
+                <SelectItem value="3">Cụm 3: Cảnh sát điều tra</SelectItem>
+                <SelectItem value="4">Cụm 4: Quản lý hành chính</SelectItem>
+                <SelectItem value="5">Cụm 5: Xây dựng lực lượng</SelectItem>
               </SelectContent>
             </Select>
           </div>
         </div>
       </Card>
 
-      <ManagementTable
-        title="Danh sách tiêu chí"
-        columns={columns}
-        data={mockCriteria}
-        onAdd={() => console.log("Add criteria")}
-        onEdit={(item) => console.log("Edit criteria:", item)}
-        onDelete={(item) => console.log("Delete criteria:", item)}
-        searchPlaceholder="Tìm kiếm tiêu chí..."
-        addButtonText="Thêm tiêu chí"
-      />
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <h2 className="text-2xl font-bold">Danh sách tiêu chí</h2>
+          <div className="flex gap-3 flex-1 max-w-md">
+            <Input
+              type="search"
+              placeholder="Tìm kiếm tiêu chí..."
+              className="flex-1"
+              data-testid="input-search"
+            />
+            <Button data-testid="button-add">
+              <Plus className="w-4 h-4 mr-2" />
+              Thêm tiêu chí
+            </Button>
+          </div>
+        </div>
+
+        <div className="border rounded-md overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-muted">
+                <tr className="border-b">
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide w-12">STT</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide min-w-[400px]">Tên tiêu chí</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide w-32">Điểm tối đa</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide w-32">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(groupedCriteria).map(([groupName, items], groupIndex) => {
+                  const groupTotal = calculateGroupTotal(items);
+
+                  return (
+                    <>
+                      <tr className="bg-accent/50" key={`group-${groupName}`}>
+                        <td colSpan={2} className="px-4 py-2 font-semibold text-sm">
+                          {groupName}
+                        </td>
+                        <td className="px-4 py-2 text-center font-semibold text-sm">
+                          {groupTotal.toFixed(1)}
+                        </td>
+                        <td className="px-4 py-2"></td>
+                      </tr>
+                      {items.map((item, itemIndex) => (
+                        <tr key={item.id} className="border-b hover-elevate" data-testid={`row-criteria-${item.id}`}>
+                          <td className="px-4 py-3 text-sm text-center">{groupIndex * 10 + itemIndex + 1}</td>
+                          <td className="px-4 py-3 text-sm pl-8">{item.name}</td>
+                          <td className="px-4 py-3 text-sm text-center font-medium" data-testid={`text-maxscore-${item.id}`}>
+                            {item.maxScore.toFixed(1)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => console.log("Edit criteria:", item)}
+                                data-testid={`button-edit-${item.id}`}
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => console.log("Delete criteria:", item)}
+                                data-testid={`button-delete-${item.id}`}
+                              >
+                                <Trash2 className="w-4 h-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </>
+                  );
+                })}
+                <tr className="bg-muted font-bold">
+                  <td colSpan={2} className="px-4 py-3 text-sm">TỔNG CỘNG</td>
+                  <td className="px-4 py-3 text-sm text-center">
+                    {mockCriteria.reduce((sum, c) => sum + c.maxScore, 0).toFixed(1)}
+                  </td>
+                  <td className="px-4 py-3"></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <p>Hiển thị {mockCriteria.length} tiêu chí</p>
+        </div>
+      </div>
     </div>
   );
 }

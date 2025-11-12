@@ -9,6 +9,11 @@ import LoginPage from "@/components/LoginPage";
 import Dashboard from "@/pages/Dashboard";
 import ScoringPage from "@/pages/ScoringPage";
 import UnitsManagement from "@/pages/UnitsManagement";
+import ClustersManagement from "@/pages/ClustersManagement";
+import CriteriaManagement from "@/pages/CriteriaManagement";
+import UsersManagement from "@/pages/UsersManagement";
+import EvaluationPeriods from "@/pages/EvaluationPeriods";
+import Reports from "@/pages/Reports";
 import { useState } from "react";
 import { Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -37,14 +42,15 @@ function Router({ role }: { role: "admin" | "cluster_leader" | "user" }) {
   return (
     <Switch>
       <Route path="/" component={() => <Dashboard role={role} />} />
+      <Route path="/periods" component={EvaluationPeriods} />
+      <Route path="/reports" component={Reports} />
       <Route path="/scoring" component={() => <ScoringPage role={role} />} />
       <Route path="/self-scoring" component={() => <ScoringPage role="user" />} />
-      <Route path="/units" component={UnitsManagement} />
+      <Route path="/settings/units" component={UnitsManagement} />
+      <Route path="/settings/clusters" component={ClustersManagement} />
+      <Route path="/settings/criteria" component={CriteriaManagement} />
+      <Route path="/settings/users" component={UsersManagement} />
       <Route path="/my-units" component={() => <div className="p-6">Đơn vị của tôi</div>} />
-      <Route path="/clusters" component={() => <div className="p-6">Quản lý cụm</div>} />
-      <Route path="/criteria" component={() => <div className="p-6">Tiêu chí thi đua</div>} />
-      <Route path="/periods" component={() => <div className="p-6">Kỳ thi đua</div>} />
-      <Route path="/reports" component={() => <div className="p-6">Báo cáo</div>} />
       <Route path="/cluster-reports" component={() => <div className="p-6">Báo cáo cụm</div>} />
       <Route path="/results" component={() => <div className="p-6">Kết quả</div>} />
       <Route path="/history" component={() => <div className="p-6">Lịch sử</div>} />

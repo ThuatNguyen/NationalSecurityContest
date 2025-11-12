@@ -7,6 +7,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton,
   SidebarHeader,
   SidebarFooter,
 } from "@/components/ui/sidebar";
@@ -21,12 +24,15 @@ import {
   BarChart3,
   History,
   LogOut,
-  Shield
+  Shield,
+  Settings,
+  ChevronDown
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import RoleBadge from "./RoleBadge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface AppSidebarProps {
   role: "admin" | "cluster_leader" | "user";
@@ -39,11 +45,15 @@ export function AppSidebar({ role, userName = "Người dùng", unitName }: AppS
 
   const adminMenu = [
     { title: "Tổng quan", url: "/", icon: LayoutDashboard, testId: "nav-dashboard" },
-    { title: "Quản lý đơn vị", url: "/units", icon: Building2, testId: "nav-units" },
-    { title: "Quản lý cụm", url: "/clusters", icon: Users, testId: "nav-clusters" },
-    { title: "Tiêu chí thi đua", url: "/criteria", icon: ClipboardList, testId: "nav-criteria" },
     { title: "Kỳ thi đua", url: "/periods", icon: Calendar, testId: "nav-periods" },
     { title: "Báo cáo", url: "/reports", icon: FileText, testId: "nav-reports" },
+  ];
+
+  const adminSettingsMenu = [
+    { title: "Quản lý đơn vị", url: "/settings/units", icon: Building2, testId: "nav-units" },
+    { title: "Quản lý cụm", url: "/settings/clusters", icon: Users, testId: "nav-clusters" },
+    { title: "Tiêu chí thi đua", url: "/settings/criteria", icon: ClipboardList, testId: "nav-criteria" },
+    { title: "Quản lý người dùng", url: "/settings/users", icon: Users, testId: "nav-users" },
   ];
 
   const clusterLeaderMenu = [
@@ -91,6 +101,34 @@ export function AppSidebar({ role, userName = "Người dùng", unitName }: AppS
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              
+              {role === "admin" && (
+                <Collapsible defaultOpen className="group/collapsible">
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton data-testid="nav-settings">
+                        <Settings className="w-4 h-4" />
+                        <span>Cài đặt</span>
+                        <ChevronDown className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-180" />
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarMenuSub>
+                        {adminSettingsMenu.map((item) => (
+                          <SidebarMenuSubItem key={item.title}>
+                            <SidebarMenuSubButton asChild isActive={location === item.url} data-testid={item.testId}>
+                              <Link href={item.url}>
+                                <item.icon className="w-4 h-4" />
+                                <span>{item.title}</span>
+                              </Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        ))}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </SidebarMenuItem>
+                </Collapsible>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

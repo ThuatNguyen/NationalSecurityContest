@@ -1111,6 +1111,204 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Bulk update scores for an evaluation (multi-stage scoring)
+  app.put("/api/evaluations/:id/scores", requireAuth, async (req, res, next) => {
+    try {
+      const evaluation = await storage.getEvaluation(req.params.id);
+      if (!evaluation) {
+        return res.status(404).json({ message: "Không tìm thấy đánh giá" });
+      }
+      
+      // Check cluster ownership
+      const unit = await storage.getUnit(evaluation.unitId);
+      if (!unit) {
+        return res.status(404).json({ message: "Không tìm thấy đơn vị" });
+      }
+      
+      if (req.user!.role !== "admin") {
+        if (req.user!.role === "cluster_leader" && unit.clusterId !== req.user!.clusterId) {
+          return res.status(403).json({ message: "Bạn chỉ có thể cập nhật điểm của cụm mình" });
+        }
+        
+        if (req.user!.role === "user" && evaluation.unitId !== req.user!.unitId) {
+          return res.status(403).json({ message: "Bạn chỉ có thể cập nhật điểm của đơn vị mình" });
+        }
+      }
+      
+      // Parse and validate scores array
+      const scoresData = z.array(z.object({
+        criteriaId: z.string(),
+        selfScore: z.number().optional(),
+        selfScoreFile: z.string().optional(),
+        review1Score: z.number().optional(),
+        review1Comment: z.string().optional(),
+        review1File: z.string().optional(),
+        explanation: z.string().optional(),
+        review2Score: z.number().optional(),
+        review2Comment: z.string().optional(),
+        review2File: z.string().optional(),
+      })).parse(req.body.scores);
+      
+      // Stage-specific validation based on evaluation status and user role
+      for (const scoreData of scoresData) {
+        // Unit users can only update self-scoring before finalization
+        if (req.user!.role === "user") {
+          if (evaluation.status !== "draft" && evaluation.status !== "submitted") {
+            if (scoreData.selfScore !== undefined || scoreData.selfScoreFile !== undefined) {
+              return res.status(400).json({ message: "Chỉ có thể tự chấm điểm ở trạng thái nháp hoặc đã nộp" });
+            }
+          }
+          
+          // Unit users can only add explanation in review1_completed or explanation_submitted status
+          if (evaluation.status !== "review1_completed" && evaluation.status !== "explanation_submitted") {
+            if (scoreData.explanation !== undefined) {
+              return res.status(400).json({ message: "Chỉ có thể giải trình sau khi hoàn thành thẩm định lần 1" });
+            }
+          }
+          
+          // Unit users cannot update review scores
+          if (scoreData.review1Score !== undefined || scoreData.review1Comment !== undefined || scoreData.review1File !== undefined) {
+            return res.status(403).json({ message: "Bạn không có quyền thẩm định" });
+          }
+          if (scoreData.review2Score !== undefined || scoreData.review2Comment !== undefined || scoreData.review2File !== undefined) {
+            return res.status(403).json({ message: "Bạn không có quyền thẩm định" });
+          }
+        }
+        
+        // Cluster leaders validation (allow editing in appropriate states)
+        if (req.user!.role === "cluster_leader" || req.user!.role === "admin") {
+          // Can update review1 in submitted or later states (before finalized)
+          if (scoreData.review1Score !== undefined || scoreData.review1Comment !== undefined || scoreData.review1File !== undefined) {
+            if (evaluation.status === "draft") {
+              return res.status(400).json({ message: "Không thể thẩm định khi đơn vị chưa nộp" });
+            }
+            if (evaluation.status === "finalized") {
+              return res.status(400).json({ message: "Không thể sửa điểm đã hoàn tất" });
+            }
+          }
+          
+          // Can update review2 in explanation_submitted, review2_completed, or finalized states
+          if (scoreData.review2Score !== undefined || scoreData.review2Comment !== undefined || scoreData.review2File !== undefined) {
+            if (evaluation.status !== "explanation_submitted" && evaluation.status !== "review2_completed" && evaluation.status !== "finalized") {
+              return res.status(400).json({ message: "Chỉ có thể thẩm định lần 2 sau khi đơn vị giải trình" });
+            }
+          }
+        }
+      }
+      
+      // Fetch ALL existing scores once for this evaluation
+      const allExistingScores = await storage.getScores(req.params.id);
+      const updatedScores = [];
+      
+      for (const scoreData of scoresData) {
+        // Find existing score
+        let existingScore = allExistingScores.find(s => s.criteriaId === scoreData.criteriaId);
+        
+        let score;
+        if (existingScore) {
+          // Prepare update data with timestamps
+          const updateData: any = {};
+          
+          if (scoreData.selfScore !== undefined) {
+            updateData.selfScore = scoreData.selfScore.toString();
+            updateData.selfScoreDate = new Date();
+          }
+          if (scoreData.selfScoreFile !== undefined) {
+            updateData.selfScoreFile = scoreData.selfScoreFile;
+          }
+          
+          if (scoreData.review1Score !== undefined) {
+            updateData.review1Score = scoreData.review1Score.toString();
+            updateData.review1Date = new Date();
+          }
+          if (scoreData.review1Comment !== undefined) {
+            updateData.review1Comment = scoreData.review1Comment;
+          }
+          if (scoreData.review1File !== undefined) {
+            updateData.review1File = scoreData.review1File;
+          }
+          
+          if (scoreData.explanation !== undefined) {
+            updateData.explanation = scoreData.explanation;
+            updateData.explanationDate = new Date();
+          }
+          
+          if (scoreData.review2Score !== undefined) {
+            updateData.review2Score = scoreData.review2Score.toString();
+            updateData.review2Date = new Date();
+          }
+          if (scoreData.review2Comment !== undefined) {
+            updateData.review2Comment = scoreData.review2Comment;
+          }
+          if (scoreData.review2File !== undefined) {
+            updateData.review2File = scoreData.review2File;
+          }
+          
+          // Calculate finalScore: review2 ?? review1 ?? self (using nullish coalescing to preserve 0 scores)
+          const currentSelf = scoreData.selfScore !== undefined ? scoreData.selfScore : (existingScore.selfScore !== null ? parseFloat(existingScore.selfScore) : 0);
+          const currentReview1 = scoreData.review1Score !== undefined ? scoreData.review1Score : (existingScore.review1Score !== null ? parseFloat(existingScore.review1Score) : null);
+          const currentReview2 = scoreData.review2Score !== undefined ? scoreData.review2Score : (existingScore.review2Score !== null ? parseFloat(existingScore.review2Score) : null);
+          
+          const finalScore = currentReview2 ?? currentReview1 ?? currentSelf;
+          updateData.finalScore = finalScore.toString();
+          
+          score = await storage.updateScore(existingScore.id, updateData);
+        } else {
+          // Create new score
+          const newScore: any = {
+            evaluationId: req.params.id,
+            criteriaId: scoreData.criteriaId,
+          };
+          
+          if (scoreData.selfScore !== undefined) {
+            newScore.selfScore = scoreData.selfScore.toString();
+            newScore.selfScoreDate = new Date();
+          }
+          if (scoreData.selfScoreFile !== undefined) {
+            newScore.selfScoreFile = scoreData.selfScoreFile;
+          }
+          
+          // Calculate initial finalScore (use ?? to preserve 0 scores)
+          const finalScore = scoreData.selfScore ?? 0;
+          newScore.finalScore = finalScore.toString();
+          
+          score = await storage.createScore(newScore);
+        }
+        
+        updatedScores.push(score);
+      }
+      
+      // Recalculate totals from ALL scores for this evaluation (not just updated ones)
+      const finalAllScores = await storage.getScores(req.params.id);
+      let totalSelfScore = 0;
+      let totalReview1Score = 0;
+      let totalReview2Score = 0;
+      let totalFinalScore = 0;
+      
+      for (const score of finalAllScores) {
+        if (score.selfScore) totalSelfScore += parseFloat(score.selfScore);
+        if (score.review1Score) totalReview1Score += parseFloat(score.review1Score);
+        if (score.review2Score) totalReview2Score += parseFloat(score.review2Score);
+        if (score.finalScore) totalFinalScore += parseFloat(score.finalScore);
+      }
+      
+      // Update evaluation totals
+      await storage.updateEvaluation(req.params.id, {
+        totalSelfScore: totalSelfScore.toString(),
+        totalReview1Score: totalReview1Score > 0 ? totalReview1Score.toString() : null,
+        totalReview2Score: totalReview2Score > 0 ? totalReview2Score.toString() : null,
+        totalFinalScore: totalFinalScore.toString(),
+      });
+      
+      res.json({ message: "Cập nhật điểm thành công", scores: updatedScores });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Dữ liệu không hợp lệ", errors: error.errors });
+      }
+      next(error);
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

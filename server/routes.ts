@@ -161,7 +161,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/clusters", requireAuth, async (req, res, next) => {
     try {
       const clusters = await storage.getClusters();
-      res.json(clusters);
+      
+      // Admin can see all clusters
+      if (req.user!.role === "admin") {
+        return res.json(clusters);
+      }
+      
+      // Cluster leaders and unit users can only see their own cluster
+      if (!req.user!.clusterId) {
+        return res.json([]); // No cluster assigned
+      }
+      
+      const userClusters = clusters.filter(c => c.id === req.user!.clusterId);
+      res.json(userClusters);
     } catch (error) {
       next(error);
     }
@@ -214,7 +226,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/units", requireAuth, async (req, res, next) => {
     try {
       const clusterId = req.query.clusterId as string | undefined;
-      const units = await storage.getUnits(clusterId);
+      
+      // Admin can see all units or filter by clusterId
+      if (req.user!.role === "admin") {
+        const units = await storage.getUnits(clusterId);
+        return res.json(units);
+      }
+      
+      // Cluster leaders and unit users can only see units in their cluster
+      if (!req.user!.clusterId) {
+        return res.json([]); // No cluster assigned
+      }
+      
+      // If clusterId is provided, validate it matches user's cluster
+      if (clusterId && clusterId !== req.user!.clusterId) {
+        return res.status(403).json({ message: "Bạn chỉ có thể xem đơn vị trong cụm của mình" });
+      }
+      
+      // Return units in user's cluster
+      const units = await storage.getUnits(req.user!.clusterId);
       res.json(units);
     } catch (error) {
       next(error);

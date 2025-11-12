@@ -1,7 +1,10 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import { FileText, Edit } from "lucide-react";
+import { useState } from "react";
+import ScoringModal from "@/components/ScoringModal";
+import ReviewModal from "@/components/ReviewModal";
 
 interface Criteria {
   id: string;
@@ -9,21 +12,35 @@ interface Criteria {
   name: string;
   maxScore: number;
   selfScore?: number;
+  selfScoreFile?: string;
   review1Score?: number;
+  review1Comment?: string;
+  review1File?: string;
   explanation?: string;
   review2Score?: number;
+  review2Comment?: string;
+  review2File?: string;
   finalScore?: number;
 }
 
 export default function EvaluationPeriods() {
-  const mockCriteria: Criteria[] = [
+  const [scoringModalOpen, setScoringModalOpen] = useState(false);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [selectedCriteria, setSelectedCriteria] = useState<Criteria | null>(null);
+  const [reviewType, setReviewType] = useState<"review1" | "review2">("review1");
+  const [userRole] = useState<"admin" | "cluster_leader" | "user">("user");
+
+  const [mockCriteria, setMockCriteria] = useState<Criteria[]>([
     {
       id: "1.1",
       groupName: "I. CÔNG TÁC XÂY DỰNG ĐẢNG",
       name: "Chấp hành chủ trương, đường lối của Đảng, chính sách pháp luật của Nhà nước",
       maxScore: 1.0,
       selfScore: 0.9,
+      selfScoreFile: "bao_cao_1.1.pdf",
       review1Score: 0.85,
+      review1Comment: "Thực hiện tốt",
+      review1File: "tham_dinh_1.1.pdf",
       explanation: "Đơn vị thực hiện tốt các chủ trương",
       review2Score: 0.85,
       finalScore: 0.85,
@@ -34,6 +51,7 @@ export default function EvaluationPeriods() {
       name: "Thực hiện Nghị quyết, Chỉ thị của cấp ủy, chính quyền địa phương",
       maxScore: 1.0,
       selfScore: 0.95,
+      selfScoreFile: "bao_cao_1.2.pdf",
       review1Score: 0.9,
       review2Score: 0.9,
       finalScore: 0.9,
@@ -99,7 +117,69 @@ export default function EvaluationPeriods() {
       review2Score: 0.85,
       finalScore: 0.85,
     },
-  ];
+  ]);
+
+  const handleOpenScoringModal = (criteria: Criteria) => {
+    setSelectedCriteria(criteria);
+    setScoringModalOpen(true);
+  };
+
+  const handleOpenReviewModal = (criteria: Criteria, type: "review1" | "review2") => {
+    setSelectedCriteria(criteria);
+    setReviewType(type);
+    setReviewModalOpen(true);
+  };
+
+  const handleSaveScore = (score: number, file: File | null) => {
+    if (selectedCriteria) {
+      setMockCriteria(prev => prev.map(c => 
+        c.id === selectedCriteria.id 
+          ? { ...c, selfScore: score, selfScoreFile: file?.name || c.selfScoreFile }
+          : c
+      ));
+    }
+  };
+
+  const handleSaveReview = (score: number, comment: string, file: File | null) => {
+    if (selectedCriteria) {
+      setMockCriteria(prev => prev.map(c => {
+        if (c.id === selectedCriteria.id) {
+          if (reviewType === "review1") {
+            return { 
+              ...c, 
+              review1Score: score, 
+              review1Comment: comment,
+              review1File: file?.name || c.review1File 
+            };
+          } else {
+            return { 
+              ...c, 
+              review2Score: score,
+              review2Comment: comment, 
+              review2File: file?.name || c.review2File 
+            };
+          }
+        }
+        return c;
+      }));
+    }
+  };
+
+  // Group criteria by groupName and calculate totals
+  const groupedCriteria = mockCriteria.reduce((acc, criteria) => {
+    if (!acc[criteria.groupName]) {
+      acc[criteria.groupName] = [];
+    }
+    acc[criteria.groupName].push(criteria);
+    return acc;
+  }, {} as Record<string, Criteria[]>);
+
+  const calculateGroupTotal = (items: Criteria[], field: keyof Criteria) => {
+    return items.reduce((sum, item) => {
+      const value = item[field];
+      return sum + (typeof value === 'number' ? value : 0);
+    }, 0);
+  };
 
   let currentGroup = "";
 
@@ -167,62 +247,138 @@ export default function EvaluationPeriods() {
           <table className="w-full">
             <thead className="sticky top-0 bg-muted">
               <tr className="border-b">
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide w-12">STT</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide min-w-[300px]">Tên tiêu chí</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide w-24">Điểm tối đa</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide w-24">Điểm tự chấm</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide w-32">Thẩm định lần 1</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide min-w-[200px]">Giải trình</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide w-32">Thẩm định lần 2</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide w-32">Điểm cuối cùng</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide w-12" rowSpan={2}>STT</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide min-w-[300px]" rowSpan={2}>Tên tiêu chí</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide w-24" rowSpan={2}>Điểm tối đa</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide border-l" colSpan={2}>Điểm tự chấm</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide w-32 border-l" rowSpan={2}>Thẩm định lần 1</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide min-w-[200px]" rowSpan={2}>Giải trình</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide w-32 border-l" rowSpan={2}>Thẩm định lần 2</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide w-32" rowSpan={2}>Điểm cuối cùng</th>
+              </tr>
+              <tr className="border-b">
+                <th className="px-4 py-2 text-center text-xs font-semibold uppercase tracking-wide w-24 border-l">Điểm</th>
+                <th className="px-4 py-2 text-center text-xs font-semibold uppercase tracking-wide w-24">File</th>
               </tr>
             </thead>
             <tbody>
-              {mockCriteria.map((item, index) => {
-                const showGroupHeader = item.groupName !== currentGroup;
-                if (showGroupHeader) currentGroup = item.groupName;
+              {Object.entries(groupedCriteria).map(([groupName, items], groupIndex) => {
+                const groupTotals = {
+                  maxScore: calculateGroupTotal(items, 'maxScore'),
+                  selfScore: calculateGroupTotal(items, 'selfScore'),
+                  review1Score: calculateGroupTotal(items, 'review1Score'),
+                  review2Score: calculateGroupTotal(items, 'review2Score'),
+                  finalScore: calculateGroupTotal(items, 'finalScore'),
+                };
 
                 return (
                   <>
-                    {showGroupHeader && (
-                      <tr className="bg-accent/50" key={`group-${item.groupName}`}>
-                        <td colSpan={8} className="px-4 py-2 font-semibold text-sm">
-                          {item.groupName}
-                        </td>
-                      </tr>
-                    )}
-                    <tr key={item.id} className="border-b hover-elevate" data-testid={`row-criteria-${item.id}`}>
-                      <td className="px-4 py-3 text-sm text-center">{index + 1}</td>
-                      <td className="px-4 py-3 text-sm pl-8">{item.name}</td>
-                      <td className="px-4 py-3 text-sm text-center font-medium" data-testid={`text-maxscore-${item.id}`}>
-                        {item.maxScore}
+                    <tr className="bg-accent/50" key={`group-${groupName}`}>
+                      <td colSpan={2} className="px-4 py-2 font-semibold text-sm">
+                        {groupName}
                       </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="font-medium text-sm" data-testid={`text-selfscore-${item.id}`}>
-                          {item.selfScore ? item.selfScore.toFixed(2) : '-'}
-                        </span>
+                      <td className="px-4 py-2 text-center font-semibold text-sm">
+                        {groupTotals.maxScore.toFixed(1)}
                       </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="font-medium text-sm" data-testid={`text-review1-${item.id}`}>
-                          {item.review1Score ? item.review1Score.toFixed(2) : '-'}
-                        </span>
+                      <td className="px-4 py-2 text-center font-semibold text-sm border-l">
+                        {groupTotals.selfScore.toFixed(2)}
                       </td>
-                      <td className="px-4 py-3">
-                        <span className="text-sm text-muted-foreground" data-testid={`text-explanation-${item.id}`}>
-                          {item.explanation || '-'}
-                        </span>
+                      <td className="px-4 py-2 text-center"></td>
+                      <td className="px-4 py-2 text-center font-semibold text-sm border-l">
+                        {groupTotals.review1Score.toFixed(2)}
                       </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="font-medium text-sm" data-testid={`text-review2-${item.id}`}>
-                          {item.review2Score ? item.review2Score.toFixed(2) : '-'}
-                        </span>
+                      <td className="px-4 py-2"></td>
+                      <td className="px-4 py-2 text-center font-semibold text-sm border-l">
+                        {groupTotals.review2Score.toFixed(2)}
                       </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="font-bold text-sm text-primary" data-testid={`text-finalscore-${item.id}`}>
-                          {item.finalScore ? item.finalScore.toFixed(2) : '-'}
-                        </span>
+                      <td className="px-4 py-2 text-center font-semibold text-sm text-primary">
+                        {groupTotals.finalScore.toFixed(2)}
                       </td>
                     </tr>
+                    {items.map((item, itemIndex) => (
+                      <tr key={item.id} className="border-b hover-elevate" data-testid={`row-criteria-${item.id}`}>
+                        <td className="px-4 py-3 text-sm text-center">{groupIndex * 10 + itemIndex + 1}</td>
+                        <td className="px-4 py-3 text-sm pl-8">{item.name}</td>
+                        <td className="px-4 py-3 text-sm text-center font-medium" data-testid={`text-maxscore-${item.id}`}>
+                          {item.maxScore}
+                        </td>
+                        <td className="px-4 py-3 text-center border-l">
+                          {userRole === "user" ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleOpenScoringModal(item)}
+                              className="font-medium text-sm"
+                              data-testid={`button-selfscore-${item.id}`}
+                            >
+                              {item.selfScore ? item.selfScore.toFixed(2) : 'Chấm điểm'}
+                            </Button>
+                          ) : (
+                            <span className="font-medium text-sm" data-testid={`text-selfscore-${item.id}`}>
+                              {item.selfScore ? item.selfScore.toFixed(2) : '-'}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {item.selfScoreFile ? (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              data-testid={`button-view-file-${item.id}`}
+                            >
+                              <FileText className="w-4 h-4 text-primary" />
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center border-l">
+                          {userRole !== "user" ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleOpenReviewModal(item, "review1")}
+                              className="font-medium text-sm"
+                              data-testid={`button-review1-${item.id}`}
+                            >
+                              {item.review1Score ? item.review1Score.toFixed(2) : 'Thẩm định'}
+                            </Button>
+                          ) : (
+                            <span className="font-medium text-sm" data-testid={`text-review1-${item.id}`}>
+                              {item.review1Score ? item.review1Score.toFixed(2) : '-'}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm text-muted-foreground" data-testid={`text-explanation-${item.id}`}>
+                            {item.explanation || item.review1Comment || '-'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center border-l">
+                          {userRole !== "user" ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleOpenReviewModal(item, "review2")}
+                              className="font-medium text-sm"
+                              data-testid={`button-review2-${item.id}`}
+                            >
+                              {item.review2Score ? item.review2Score.toFixed(2) : 'Thẩm định'}
+                            </Button>
+                          ) : (
+                            <span className="font-medium text-sm" data-testid={`text-review2-${item.id}`}>
+                              {item.review2Score ? item.review2Score.toFixed(2) : '-'}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="font-bold text-sm text-primary" data-testid={`text-finalscore-${item.id}`}>
+                            {item.finalScore ? item.finalScore.toFixed(2) : '-'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
                   </>
                 );
               })}
@@ -231,14 +387,15 @@ export default function EvaluationPeriods() {
                 <td className="px-4 py-3 text-sm text-center">
                   {mockCriteria.reduce((sum, c) => sum + c.maxScore, 0).toFixed(1)}
                 </td>
-                <td className="px-4 py-3 text-sm text-center">
+                <td className="px-4 py-3 text-sm text-center border-l">
                   {mockCriteria.reduce((sum, c) => sum + (c.selfScore || 0), 0).toFixed(2)}
                 </td>
-                <td className="px-4 py-3 text-sm text-center">
+                <td className="px-4 py-3 text-sm text-center"></td>
+                <td className="px-4 py-3 text-sm text-center border-l">
                   {mockCriteria.reduce((sum, c) => sum + (c.review1Score || 0), 0).toFixed(2)}
                 </td>
                 <td className="px-4 py-3 text-sm text-center"></td>
-                <td className="px-4 py-3 text-sm text-center">
+                <td className="px-4 py-3 text-sm text-center border-l">
                   {mockCriteria.reduce((sum, c) => sum + (c.review2Score || 0), 0).toFixed(2)}
                 </td>
                 <td className="px-4 py-3 text-sm text-center text-primary">
@@ -249,6 +406,32 @@ export default function EvaluationPeriods() {
           </table>
         </div>
       </div>
+
+      {selectedCriteria && (
+        <>
+          <ScoringModal
+            open={scoringModalOpen}
+            onClose={() => setScoringModalOpen(false)}
+            criteriaName={selectedCriteria.name}
+            maxScore={selectedCriteria.maxScore}
+            currentScore={selectedCriteria.selfScore}
+            currentFile={selectedCriteria.selfScoreFile}
+            onSave={handleSaveScore}
+          />
+          <ReviewModal
+            open={reviewModalOpen}
+            onClose={() => setReviewModalOpen(false)}
+            criteriaName={selectedCriteria.name}
+            maxScore={selectedCriteria.maxScore}
+            selfScore={selectedCriteria.selfScore}
+            currentReviewScore={reviewType === "review1" ? selectedCriteria.review1Score : selectedCriteria.review2Score}
+            currentComment={reviewType === "review1" ? selectedCriteria.review1Comment : selectedCriteria.review2Comment}
+            currentFile={reviewType === "review1" ? selectedCriteria.review1File : selectedCriteria.review2File}
+            reviewType={reviewType}
+            onSave={handleSaveReview}
+          />
+        </>
+      )}
     </div>
   );
 }

@@ -2,21 +2,50 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Shield } from "lucide-react";
+import { Shield, AlertCircle } from "lucide-react";
 import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
-interface LoginPageProps {
-  onLogin?: (username: string, password: string) => void;
-}
-
-export default function LoginPage({ onLogin }: LoginPageProps) {
+export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const { toast } = useToast();
+
+  const loginMutation = useMutation({
+    mutationFn: async (credentials: { username: string; password: string }) => {
+      const response = await apiRequest('POST', '/api/auth/login', credentials);
+      return await response.json();
+    },
+    onSuccess: (user: any) => {
+      queryClient.setQueryData(['/api/auth/me'], user);
+      toast({
+        title: "Đăng nhập thành công",
+        description: `Chào mừng, ${user.fullName}!`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Đăng nhập thất bại",
+        description: error.message || "Tên đăng nhập hoặc mật khẩu không đúng",
+        variant: "destructive",
+      });
+    },
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Login attempt:", username);
-    onLogin?.(username, password);
+    if (!username || !password) {
+      toast({
+        title: "Lỗi",
+        description: "Vui lòng nhập đầy đủ thông tin",
+        variant: "destructive",
+      });
+      return;
+    }
+    loginMutation.mutate({ username, password });
   };
 
   return (
@@ -35,6 +64,14 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
+            {loginMutation.isError && (
+              <Alert variant="destructive" data-testid="alert-login-error">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Tên đăng nhập hoặc mật khẩu không đúng
+                </AlertDescription>
+              </Alert>
+            )}
             <div className="space-y-2">
               <Label htmlFor="username">Tên đăng nhập</Label>
               <Input
@@ -44,6 +81,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 data-testid="input-username"
+                disabled={loginMutation.isPending}
                 required
               />
             </div>
@@ -56,13 +94,19 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 data-testid="input-password"
+                disabled={loginMutation.isPending}
                 required
               />
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-3">
-            <Button type="submit" className="w-full" data-testid="button-login">
-              Đăng nhập
+            <Button 
+              type="submit" 
+              className="w-full" 
+              data-testid="button-login"
+              disabled={loginMutation.isPending}
+            >
+              {loginMutation.isPending ? "Đang đăng nhập..." : "Đăng nhập"}
             </Button>
             <p className="text-xs text-center text-muted-foreground">
               Liên hệ quản trị viên nếu quên mật khẩu

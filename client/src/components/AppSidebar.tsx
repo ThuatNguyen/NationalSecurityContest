@@ -33,15 +33,37 @@ import RoleBadge from "./RoleBadge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useSession } from "@/lib/useSession";
+import { useQuery } from "@tanstack/react-query";
 
 interface AppSidebarProps {
   role: "admin" | "cluster_leader" | "user";
-  userName?: string;
-  unitName?: string;
+  user: {
+    id: string;
+    username: string;
+    fullName: string;
+    role: string;
+    clusterId: string | null;
+    unitId: string | null;
+  };
 }
 
-export function AppSidebar({ role, userName = "Người dùng", unitName }: AppSidebarProps) {
+interface Unit {
+  id: string;
+  name: string;
+  clusterId: string;
+  description?: string;
+  createdAt: string;
+}
+
+export function AppSidebar({ role, user }: AppSidebarProps) {
   const [location] = useLocation();
+  const { logout } = useSession();
+
+  const { data: unit } = useQuery<Unit>({
+    queryKey: ['/api/units', user.unitId],
+    enabled: !!user.unitId,
+  });
 
   const adminMenu = [
     { title: "Tổng quan", url: "/", icon: LayoutDashboard, testId: "nav-dashboard" },
@@ -139,16 +161,22 @@ export function AppSidebar({ role, userName = "Người dùng", unitName }: AppS
           <div className="flex items-center gap-3">
             <Avatar className="w-9 h-9">
               <AvatarFallback className="bg-primary text-primary-foreground text-sm">
-                {userName.substring(0, 2).toUpperCase()}
+                {user.fullName.substring(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate" data-testid="text-username">{userName}</p>
-              {unitName && <p className="text-xs text-muted-foreground truncate">{unitName}</p>}
+              <p className="text-sm font-medium truncate" data-testid="text-username">{user.fullName}</p>
+              {unit && <p className="text-xs text-muted-foreground truncate">{unit.name}</p>}
             </div>
           </div>
           <RoleBadge role={role} className="w-full justify-center" />
-          <Button variant="outline" size="sm" className="w-full" data-testid="button-logout">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="w-full" 
+            onClick={logout}
+            data-testid="button-logout"
+          >
             <LogOut className="w-4 h-4 mr-2" />
             Đăng xuất
           </Button>

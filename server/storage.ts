@@ -18,9 +18,12 @@ const db = drizzle(sql, { schema });
 
 export interface IStorage {
   // Users
+  getUsers(): Promise<User[]>;
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUser(id: string, user: Partial<InsertUser>): Promise<User | undefined>;
+  deleteUser(id: string): Promise<void>;
   
   // Clusters
   getClusters(): Promise<Cluster[]>;
@@ -72,6 +75,10 @@ export interface IStorage {
 
 export class DatabaseStorage implements IStorage {
   // Users
+  async getUsers(): Promise<User[]> {
+    return await db.select().from(schema.users);
+  }
+
   async getUser(id: string): Promise<User | undefined> {
     const result = await db.select().from(schema.users).where(eq(schema.users.id, id)).limit(1);
     return result[0];
@@ -85,6 +92,15 @@ export class DatabaseStorage implements IStorage {
   async createUser(user: InsertUser): Promise<User> {
     const result = await db.insert(schema.users).values(user).returning();
     return result[0];
+  }
+
+  async updateUser(id: string, user: Partial<InsertUser>): Promise<User | undefined> {
+    const result = await db.update(schema.users).set(user).where(eq(schema.users.id, id)).returning();
+    return result[0];
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    await db.delete(schema.users).where(eq(schema.users.id, id));
   }
 
   // Clusters

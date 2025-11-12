@@ -157,6 +157,114 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(req.user);
   });
 
+  // User management routes
+  function sanitizeUser(user: any) {
+    const { password, ...sanitized } = user;
+    return sanitized;
+  }
+
+  app.get("/api/users", requireRole("admin"), async (req, res, next) => {
+    try {
+      const users = await storage.getUsers();
+      const sanitized = users.map(sanitizeUser);
+      res.json(sanitized);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.put("/api/users/:id", requireRole("admin"), async (req, res, next) => {
+    try {
+      const updateUserSchema = insertUserSchema.partial().extend({
+        password: z.string().min(8, "Mật khẩu phải có ít nhất 8 ký tự").optional(),
+      });
+      
+      const userData = updateUserSchema.parse(req.body);
+      
+      // Check if user exists
+      const existingUser = await storage.getUser(req.params.id);
+      if (!existingUser) {
+        return res.status(404).json({ message: "Không tìm thấy người dùng" });
+      }
+
+      // Prevent self-demotion from admin
+      if (req.user!.id === req.params.id && userData.role && userData.role !== "admin") {
+        return res.status(400).json({ message: "Không thể tự thay đổi quyền admin của mình" });
+      }
+
+      // Check username uniqueness if changing username
+      if (userData.username && userData.username !== existingUser.username) {
+        const existingUsername = await storage.getUserByUsername(userData.username);
+        if (existingUsername) {
+          return res.status(400).json({ message: "Tên đăng nhập đã tồn tại" });
+        }
+      }
+
+      // Validate role-specific requirements
+      if (userData.role === "cluster_leader" && !userData.clusterId && !existingUser.clusterId) {
+        return res.status(400).json({ message: "Cụm trưởng phải được gán vào một cụm" });
+      }
+      if (userData.role === "user" && !userData.unitId && !existingUser.unitId) {
+        return res.status(400).json({ message: "Người dùng đơn vị phải được gán vào một đơn vị" });
+      }
+
+      // Hash password if provided
+      const updateData: any = { ...userData };
+      if (userData.password) {
+        updateData.password = await bcrypt.hash(userData.password, 10);
+      }
+
+      // Ensure at least one admin remains if demoting current admin
+      if (existingUser.role === "admin" && userData.role && userData.role !== "admin") {
+        const allUsers = await storage.getUsers();
+        const adminCount = allUsers.filter(u => u.role === "admin").length;
+        if (adminCount <= 1) {
+          return res.status(400).json({ message: "Phải có ít nhất một quản trị viên trong hệ thống" });
+        }
+      }
+
+      const updatedUser = await storage.updateUser(req.params.id, updateData);
+      if (!updatedUser) {
+        return res.status(404).json({ message: "Không tìm thấy người dùng" });
+      }
+
+      res.json(sanitizeUser(updatedUser));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Dữ liệu không hợp lệ", errors: error.errors });
+      }
+      next(error);
+    }
+  });
+
+  app.delete("/api/users/:id", requireRole("admin"), async (req, res, next) => {
+    try {
+      // Prevent self-deletion
+      if (req.user!.id === req.params.id) {
+        return res.status(400).json({ message: "Không thể xóa tài khoản của chính mình" });
+      }
+
+      const targetUser = await storage.getUser(req.params.id);
+      if (!targetUser) {
+        return res.status(404).json({ message: "Không tìm thấy người dùng" });
+      }
+
+      // Ensure at least one admin remains
+      if (targetUser.role === "admin") {
+        const allUsers = await storage.getUsers();
+        const adminCount = allUsers.filter(u => u.role === "admin").length;
+        if (adminCount <= 1) {
+          return res.status(400).json({ message: "Không thể xóa quản trị viên cuối cùng" });
+        }
+      }
+
+      await storage.deleteUser(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  });
+
   // Cluster routes (Admin only)
   app.get("/api/clusters", requireAuth, async (req, res, next) => {
     try {

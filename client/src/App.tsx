@@ -17,6 +17,8 @@ import Reports from "@/pages/Reports";
 import { useState } from "react";
 import { Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SessionProvider, useSession } from "@/lib/useSession";
+import { Card } from "@/components/ui/card";
 
 function ThemeToggle() {
   const [isDark, setIsDark] = useState(false);
@@ -59,53 +61,65 @@ function Router({ role }: { role: "admin" | "cluster_leader" | "user" }) {
   );
 }
 
-function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(true);
-  const [userRole] = useState<"admin" | "cluster_leader" | "user">("admin");
+function AppContent() {
+  const { user, isLoading, isError } = useSession();
 
   const style = {
     "--sidebar-width": "16rem",
     "--sidebar-width-icon": "3rem",
   };
 
-  if (!isLoggedIn) {
+  if (isLoading) {
     return (
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <LoginPage onLogin={() => setIsLoggedIn(true)} />
-          <Toaster />
-        </TooltipProvider>
-      </QueryClientProvider>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Card className="p-8">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+            <p className="text-sm text-muted-foreground">Đang tải...</p>
+          </div>
+        </Card>
+      </div>
     );
   }
 
+  if (isError || !user) {
+    return <LoginPage />;
+  }
+
+  const userRole = user.role as "admin" | "cluster_leader" | "user";
+
+  return (
+    <SidebarProvider style={style as React.CSSProperties}>
+      <div className="flex h-screen w-full">
+        <AppSidebar 
+          role={userRole}
+          user={user}
+        />
+        <div className="flex flex-col flex-1 overflow-hidden">
+          <header className="flex items-center justify-between px-4 py-3 border-b bg-background">
+            <SidebarTrigger data-testid="button-sidebar-toggle" />
+            <ThemeToggle />
+          </header>
+          <main className="flex-1 overflow-y-auto">
+            <div className="p-6 max-w-screen-2xl mx-auto">
+              <Router role={userRole} />
+            </div>
+          </main>
+        </div>
+      </div>
+    </SidebarProvider>
+  );
+}
+
+export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <SidebarProvider style={style as React.CSSProperties}>
-          <div className="flex h-screen w-full">
-            <AppSidebar 
-              role={userRole} 
-              userName="Nguyễn Văn A" 
-              unitName="Công an Hà Nội"
-            />
-            <div className="flex flex-col flex-1 overflow-hidden">
-              <header className="flex items-center justify-between px-4 py-3 border-b bg-background">
-                <SidebarTrigger data-testid="button-sidebar-toggle" />
-                <ThemeToggle />
-              </header>
-              <main className="flex-1 overflow-y-auto">
-                <div className="p-6 max-w-screen-2xl mx-auto">
-                  <Router role={userRole} />
-                </div>
-              </main>
-            </div>
-          </div>
-        </SidebarProvider>
+        <SessionProvider>
+          <AppContent />
+        </SessionProvider>
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>
   );
 }
-
-export default App;

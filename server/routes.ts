@@ -4,7 +4,17 @@ import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import bcrypt from "bcryptjs";
 import { storage } from "./storage";
-import { insertUserSchema, type User } from "@shared/schema";
+import { 
+  insertUserSchema, 
+  insertClusterSchema,
+  insertUnitSchema,
+  insertCriteriaGroupSchema,
+  insertCriteriaSchema,
+  insertEvaluationPeriodSchema,
+  insertEvaluationSchema,
+  insertScoreSchema,
+  type User 
+} from "@shared/schema";
 import { z } from "zod";
 
 declare global {
@@ -159,27 +169,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/clusters", requireRole("admin"), async (req, res, next) => {
     try {
-      const cluster = await storage.createCluster(req.body);
+      const clusterData = insertClusterSchema.parse(req.body);
+      const cluster = await storage.createCluster(clusterData);
       res.json(cluster);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Dữ liệu không hợp lệ", errors: error.errors });
+      }
       next(error);
     }
   });
 
   app.put("/api/clusters/:id", requireRole("admin"), async (req, res, next) => {
     try {
-      const cluster = await storage.updateCluster(req.params.id, req.body);
+      const clusterData = insertClusterSchema.partial().parse(req.body);
+      const cluster = await storage.updateCluster(req.params.id, clusterData);
       if (!cluster) {
         return res.status(404).json({ message: "Không tìm thấy cụm thi đua" });
       }
       res.json(cluster);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Dữ liệu không hợp lệ", errors: error.errors });
+      }
       next(error);
     }
   });
 
   app.delete("/api/clusters/:id", requireRole("admin"), async (req, res, next) => {
     try {
+      const existingCluster = await storage.getCluster(req.params.id);
+      if (!existingCluster) {
+        return res.status(404).json({ message: "Không tìm thấy cụm thi đua" });
+      }
+      
       await storage.deleteCluster(req.params.id);
       res.json({ message: "Xóa thành công" });
     } catch (error) {
@@ -200,30 +223,578 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/units", requireRole("admin", "cluster_leader"), async (req, res, next) => {
     try {
-      const unit = await storage.createUnit(req.body);
+      const unitData = insertUnitSchema.parse(req.body);
+      
+      // Cluster leaders can only create units in their own cluster
+      if (req.user!.role === "cluster_leader" && unitData.clusterId !== req.user!.clusterId) {
+        return res.status(403).json({ message: "Bạn chỉ có thể tạo đơn vị trong cụm của mình" });
+      }
+      
+      const unit = await storage.createUnit(unitData);
       res.json(unit);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Dữ liệu không hợp lệ", errors: error.errors });
+      }
       next(error);
     }
   });
 
   app.put("/api/units/:id", requireRole("admin", "cluster_leader"), async (req, res, next) => {
     try {
-      const unit = await storage.updateUnit(req.params.id, req.body);
-      if (!unit) {
+      const unitData = insertUnitSchema.partial().parse(req.body);
+      
+      // Check if unit exists and belongs to user's cluster
+      const existingUnit = await storage.getUnit(req.params.id);
+      if (!existingUnit) {
         return res.status(404).json({ message: "Không tìm thấy đơn vị" });
       }
+      
+      if (req.user!.role === "cluster_leader") {
+        if (existingUnit.clusterId !== req.user!.clusterId) {
+          return res.status(403).json({ message: "Bạn chỉ có thể sửa đơn vị trong cụm của mình" });
+        }
+        
+        // Cluster leaders cannot reassign units to different clusters
+        if (unitData.clusterId && unitData.clusterId !== existingUnit.clusterId) {
+          return res.status(403).json({ message: "Bạn không có quyền chuyển đơn vị sang cụm khác" });
+        }
+      }
+      
+      const unit = await storage.updateUnit(req.params.id, unitData);
       res.json(unit);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Dữ liệu không hợp lệ", errors: error.errors });
+      }
       next(error);
     }
   });
 
   app.delete("/api/units/:id", requireRole("admin", "cluster_leader"), async (req, res, next) => {
     try {
+      const existingUnit = await storage.getUnit(req.params.id);
+      if (!existingUnit) {
+        return res.status(404).json({ message: "Không tìm thấy đơn vị" });
+      }
+      
+      if (req.user!.role === "cluster_leader" && existingUnit.clusterId !== req.user!.clusterId) {
+        return res.status(403).json({ message: "Bạn chỉ có thể xóa đơn vị trong cụm của mình" });
+      }
+      
       await storage.deleteUnit(req.params.id);
       res.json({ message: "Xóa thành công" });
     } catch (error) {
+      next(error);
+    }
+  });
+
+  // Criteria Group routes
+  app.get("/api/criteria-groups", requireAuth, async (req, res, next) => {
+    try {
+      const { clusterId, year } = req.query;
+      if (!clusterId || !year) {
+        return res.status(400).json({ message: "Thiếu clusterId hoặc year" });
+      }
+      const yearNum = parseInt(year as string);
+      if (isNaN(yearNum)) {
+        return res.status(400).json({ message: "year phải là số hợp lệ" });
+      }
+      
+      // Cluster leaders and unit users can only view groups in their own cluster
+      if (req.user!.role !== "admin" && req.user!.clusterId !== clusterId) {
+        return res.status(403).json({ message: "Bạn chỉ có thể xem nhóm tiêu chí của cụm mình" });
+      }
+      
+      const groups = await storage.getCriteriaGroups(clusterId as string, yearNum);
+      res.json(groups);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/criteria-groups", requireRole("admin", "cluster_leader"), async (req, res, next) => {
+    try {
+      const groupData = insertCriteriaGroupSchema.parse(req.body);
+      
+      // Cluster leaders can only create groups for their own cluster
+      if (req.user!.role === "cluster_leader" && groupData.clusterId !== req.user!.clusterId) {
+        return res.status(403).json({ message: "Bạn chỉ có thể tạo nhóm tiêu chí cho cụm của mình" });
+      }
+      
+      const group = await storage.createCriteriaGroup(groupData);
+      res.json(group);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Dữ liệu không hợp lệ", errors: error.errors });
+      }
+      next(error);
+    }
+  });
+
+  app.put("/api/criteria-groups/:id", requireRole("admin", "cluster_leader"), async (req, res, next) => {
+    try {
+      const groupData = insertCriteriaGroupSchema.partial().parse(req.body);
+      
+      const existingGroup = await storage.getCriteriaGroup(req.params.id);
+      if (!existingGroup) {
+        return res.status(404).json({ message: "Không tìm thấy nhóm tiêu chí" });
+      }
+      
+      if (req.user!.role === "cluster_leader") {
+        if (existingGroup.clusterId !== req.user!.clusterId) {
+          return res.status(403).json({ message: "Bạn chỉ có thể sửa nhóm tiêu chí của cụm mình" });
+        }
+        
+        // Cluster leaders cannot reassign groups to different clusters
+        if (groupData.clusterId && groupData.clusterId !== existingGroup.clusterId) {
+          return res.status(403).json({ message: "Bạn không có quyền chuyển nhóm tiêu chí sang cụm khác" });
+        }
+      }
+      
+      const group = await storage.updateCriteriaGroup(req.params.id, groupData);
+      res.json(group);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Dữ liệu không hợp lệ", errors: error.errors });
+      }
+      next(error);
+    }
+  });
+
+  app.delete("/api/criteria-groups/:id", requireRole("admin", "cluster_leader"), async (req, res, next) => {
+    try {
+      const existingGroup = await storage.getCriteriaGroup(req.params.id);
+      if (!existingGroup) {
+        return res.status(404).json({ message: "Không tìm thấy nhóm tiêu chí" });
+      }
+      
+      if (req.user!.role === "cluster_leader" && existingGroup.clusterId !== req.user!.clusterId) {
+        return res.status(403).json({ message: "Bạn chỉ có thể xóa nhóm tiêu chí của cụm mình" });
+      }
+      
+      await storage.deleteCriteriaGroup(req.params.id);
+      res.json({ message: "Xóa thành công" });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Criteria routes
+  app.get("/api/criteria", requireAuth, async (req, res, next) => {
+    try {
+      const { groupId } = req.query;
+      if (!groupId) {
+        return res.status(400).json({ message: "Thiếu groupId" });
+      }
+      
+      // Verify the group exists and check cluster ownership
+      const group = await storage.getCriteriaGroup(groupId as string);
+      if (!group) {
+        return res.status(404).json({ message: "Không tìm thấy nhóm tiêu chí" });
+      }
+      
+      // Cluster leaders and unit users can only view criteria in their own cluster
+      if (req.user!.role !== "admin" && req.user!.clusterId !== group.clusterId) {
+        return res.status(403).json({ message: "Bạn chỉ có thể xem tiêu chí của cụm mình" });
+      }
+      
+      const criteria = await storage.getCriteria(groupId as string);
+      res.json(criteria);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/criteria/:id", requireAuth, async (req, res, next) => {
+    try {
+      const criteria = await storage.getCriteriaById(req.params.id);
+      if (!criteria) {
+        return res.status(404).json({ message: "Không tìm thấy tiêu chí" });
+      }
+      
+      // Verify cluster ownership via parent group
+      const group = await storage.getCriteriaGroup(criteria.groupId);
+      if (req.user!.role !== "admin" && group && req.user!.clusterId !== group.clusterId) {
+        return res.status(403).json({ message: "Bạn chỉ có thể xem tiêu chí của cụm mình" });
+      }
+      
+      res.json(criteria);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/criteria", requireRole("admin", "cluster_leader"), async (req, res, next) => {
+    try {
+      const criteriaData = insertCriteriaSchema.parse(req.body);
+      
+      // Verify the group belongs to the user's cluster
+      const group = await storage.getCriteriaGroup(criteriaData.groupId);
+      if (!group) {
+        return res.status(404).json({ message: "Không tìm thấy nhóm tiêu chí" });
+      }
+      
+      if (req.user!.role === "cluster_leader" && group.clusterId !== req.user!.clusterId) {
+        return res.status(403).json({ message: "Bạn chỉ có thể tạo tiêu chí cho cụm của mình" });
+      }
+      
+      const criteria = await storage.createCriteria(criteriaData);
+      res.json(criteria);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Dữ liệu không hợp lệ", errors: error.errors });
+      }
+      next(error);
+    }
+  });
+
+  app.put("/api/criteria/:id", requireRole("admin", "cluster_leader"), async (req, res, next) => {
+    try {
+      const criteriaData = insertCriteriaSchema.partial().parse(req.body);
+      
+      const existingCriteria = await storage.getCriteriaById(req.params.id);
+      if (!existingCriteria) {
+        return res.status(404).json({ message: "Không tìm thấy tiêu chí" });
+      }
+      
+      const group = await storage.getCriteriaGroup(existingCriteria.groupId);
+      if (req.user!.role === "cluster_leader") {
+        if (group && group.clusterId !== req.user!.clusterId) {
+          return res.status(403).json({ message: "Bạn chỉ có thể sửa tiêu chí của cụm mình" });
+        }
+        
+        // If reassigning to a different group, verify the new group is in their cluster
+        if (criteriaData.groupId && criteriaData.groupId !== existingCriteria.groupId) {
+          const newGroup = await storage.getCriteriaGroup(criteriaData.groupId);
+          if (!newGroup || newGroup.clusterId !== req.user!.clusterId) {
+            return res.status(403).json({ message: "Bạn chỉ có thể chuyển tiêu chí đến nhóm trong cụm của mình" });
+          }
+        }
+      }
+      
+      const criteria = await storage.updateCriteria(req.params.id, criteriaData);
+      res.json(criteria);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Dữ liệu không hợp lệ", errors: error.errors });
+      }
+      next(error);
+    }
+  });
+
+  app.delete("/api/criteria/:id", requireRole("admin", "cluster_leader"), async (req, res, next) => {
+    try {
+      const existingCriteria = await storage.getCriteriaById(req.params.id);
+      if (!existingCriteria) {
+        return res.status(404).json({ message: "Không tìm thấy tiêu chí" });
+      }
+      
+      const group = await storage.getCriteriaGroup(existingCriteria.groupId);
+      if (req.user!.role === "cluster_leader" && group && group.clusterId !== req.user!.clusterId) {
+        return res.status(403).json({ message: "Bạn chỉ có thể xóa tiêu chí của cụm mình" });
+      }
+      
+      await storage.deleteCriteria(req.params.id);
+      res.json({ message: "Xóa thành công" });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Evaluation Period routes
+  app.get("/api/evaluation-periods", requireAuth, async (req, res, next) => {
+    try {
+      const { clusterId } = req.query;
+      const periods = await storage.getEvaluationPeriods(clusterId as string | undefined);
+      res.json(periods);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/evaluation-periods/:id", requireAuth, async (req, res, next) => {
+    try {
+      const period = await storage.getEvaluationPeriod(req.params.id);
+      if (!period) {
+        return res.status(404).json({ message: "Không tìm thấy kỳ thi đua" });
+      }
+      res.json(period);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/evaluation-periods", requireRole("admin", "cluster_leader"), async (req, res, next) => {
+    try {
+      const periodData = insertEvaluationPeriodSchema.parse(req.body);
+      
+      // Cluster leaders can only create periods for their own cluster
+      if (req.user!.role === "cluster_leader" && periodData.clusterId !== req.user!.clusterId) {
+        return res.status(403).json({ message: "Bạn chỉ có thể tạo kỳ thi đua cho cụm của mình" });
+      }
+      
+      const period = await storage.createEvaluationPeriod(periodData);
+      res.json(period);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Dữ liệu không hợp lệ", errors: error.errors });
+      }
+      next(error);
+    }
+  });
+
+  app.put("/api/evaluation-periods/:id", requireRole("admin", "cluster_leader"), async (req, res, next) => {
+    try {
+      const periodData = insertEvaluationPeriodSchema.partial().parse(req.body);
+      
+      const existingPeriod = await storage.getEvaluationPeriod(req.params.id);
+      if (!existingPeriod) {
+        return res.status(404).json({ message: "Không tìm thấy kỳ thi đua" });
+      }
+      
+      if (req.user!.role === "cluster_leader") {
+        if (existingPeriod.clusterId !== req.user!.clusterId) {
+          return res.status(403).json({ message: "Bạn chỉ có thể sửa kỳ thi đua của cụm mình" });
+        }
+        
+        // Cluster leaders cannot reassign periods to different clusters
+        if (periodData.clusterId && periodData.clusterId !== existingPeriod.clusterId) {
+          return res.status(403).json({ message: "Bạn không có quyền chuyển kỳ thi đua sang cụm khác" });
+        }
+      }
+      
+      const period = await storage.updateEvaluationPeriod(req.params.id, periodData);
+      res.json(period);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Dữ liệu không hợp lệ", errors: error.errors });
+      }
+      next(error);
+    }
+  });
+
+  app.delete("/api/evaluation-periods/:id", requireRole("admin", "cluster_leader"), async (req, res, next) => {
+    try {
+      const existingPeriod = await storage.getEvaluationPeriod(req.params.id);
+      if (!existingPeriod) {
+        return res.status(404).json({ message: "Không tìm thấy kỳ thi đua" });
+      }
+      
+      if (req.user!.role === "cluster_leader" && existingPeriod.clusterId !== req.user!.clusterId) {
+        return res.status(403).json({ message: "Bạn chỉ có thể xóa kỳ thi đua của cụm mình" });
+      }
+      
+      await storage.deleteEvaluationPeriod(req.params.id);
+      res.json({ message: "Xóa thành công" });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Evaluation routes
+  app.get("/api/evaluations", requireAuth, async (req, res, next) => {
+    try {
+      const { periodId, unitId } = req.query;
+      const evaluations = await storage.getEvaluations(periodId as string | undefined, unitId as string | undefined);
+      res.json(evaluations);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/evaluations/:id", requireAuth, async (req, res, next) => {
+    try {
+      const evaluation = await storage.getEvaluation(req.params.id);
+      if (!evaluation) {
+        return res.status(404).json({ message: "Không tìm thấy đánh giá" });
+      }
+      res.json(evaluation);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/evaluations", requireRole("admin", "cluster_leader"), async (req, res, next) => {
+    try {
+      const evaluationData = insertEvaluationSchema.parse(req.body);
+      
+      // Verify the unit exists and check cluster ownership
+      const unit = await storage.getUnit(evaluationData.unitId);
+      if (!unit) {
+        return res.status(404).json({ message: "Không tìm thấy đơn vị" });
+      }
+      
+      // Cluster leaders can only create evaluations for units in their cluster
+      if (req.user!.role === "cluster_leader" && unit.clusterId !== req.user!.clusterId) {
+        return res.status(403).json({ message: "Bạn chỉ có thể tạo đánh giá cho đơn vị trong cụm của mình" });
+      }
+      
+      const evaluation = await storage.createEvaluation(evaluationData);
+      res.json(evaluation);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Dữ liệu không hợp lệ", errors: error.errors });
+      }
+      next(error);
+    }
+  });
+
+  app.put("/api/evaluations/:id", requireAuth, async (req, res, next) => {
+    try {
+      const evaluationData = insertEvaluationSchema.partial().parse(req.body);
+      
+      const existingEvaluation = await storage.getEvaluation(req.params.id);
+      if (!existingEvaluation) {
+        return res.status(404).json({ message: "Không tìm thấy đánh giá" });
+      }
+      
+      // Users can only update evaluations for their own unit
+      if (req.user!.role === "user" && existingEvaluation.unitId !== req.user!.unitId) {
+        return res.status(403).json({ message: "Bạn chỉ có thể sửa đánh giá của đơn vị mình" });
+      }
+      
+      // Cluster leaders can only update evaluations for units in their cluster
+      if (req.user!.role === "cluster_leader") {
+        const unit = await storage.getUnit(existingEvaluation.unitId);
+        if (unit && unit.clusterId !== req.user!.clusterId) {
+          return res.status(403).json({ message: "Bạn chỉ có thể sửa đánh giá của cụm mình" });
+        }
+        
+        // If reassigning to a different unit, verify the new unit is also in their cluster
+        if (evaluationData.unitId && evaluationData.unitId !== existingEvaluation.unitId) {
+          const newUnit = await storage.getUnit(evaluationData.unitId);
+          if (!newUnit || newUnit.clusterId !== req.user!.clusterId) {
+            return res.status(403).json({ message: "Bạn chỉ có thể chuyển đánh giá đến đơn vị trong cụm của mình" });
+          }
+        }
+      }
+      
+      // Regular users cannot reassign evaluations to different units
+      if (req.user!.role === "user" && evaluationData.unitId && evaluationData.unitId !== existingEvaluation.unitId) {
+        return res.status(403).json({ message: "Bạn không có quyền chuyển đánh giá sang đơn vị khác" });
+      }
+      
+      const evaluation = await storage.updateEvaluation(req.params.id, evaluationData);
+      res.json(evaluation);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Dữ liệu không hợp lệ", errors: error.errors });
+      }
+      next(error);
+    }
+  });
+
+  // Score routes
+  app.get("/api/scores", requireAuth, async (req, res, next) => {
+    try {
+      const { evaluationId } = req.query;
+      if (!evaluationId) {
+        return res.status(400).json({ message: "Thiếu evaluationId" });
+      }
+      const scores = await storage.getScores(evaluationId as string);
+      res.json(scores);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/scores/:id", requireAuth, async (req, res, next) => {
+    try {
+      const score = await storage.getScore(req.params.id);
+      if (!score) {
+        return res.status(404).json({ message: "Không tìm thấy điểm" });
+      }
+      res.json(score);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/scores", requireAuth, async (req, res, next) => {
+    try {
+      const scoreData = insertScoreSchema.parse(req.body);
+      
+      // Verify the evaluation exists and check permissions
+      const evaluation = await storage.getEvaluation(scoreData.evaluationId);
+      if (!evaluation) {
+        return res.status(404).json({ message: "Không tìm thấy đánh giá" });
+      }
+      
+      // Users can only create scores for their own unit's evaluation
+      if (req.user!.role === "user" && evaluation.unitId !== req.user!.unitId) {
+        return res.status(403).json({ message: "Bạn chỉ có thể tạo điểm cho đơn vị mình" });
+      }
+      
+      // Cluster leaders can only create scores for evaluations in their cluster
+      if (req.user!.role === "cluster_leader") {
+        const unit = await storage.getUnit(evaluation.unitId);
+        if (!unit || unit.clusterId !== req.user!.clusterId) {
+          return res.status(403).json({ message: "Bạn chỉ có thể tạo điểm cho cụm của mình" });
+        }
+      }
+      
+      const score = await storage.createScore(scoreData);
+      res.json(score);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Dữ liệu không hợp lệ", errors: error.errors });
+      }
+      next(error);
+    }
+  });
+
+  app.put("/api/scores/:id", requireAuth, async (req, res, next) => {
+    try {
+      const scoreData = insertScoreSchema.partial().parse(req.body);
+      
+      const existingScore = await storage.getScore(req.params.id);
+      if (!existingScore) {
+        return res.status(404).json({ message: "Không tìm thấy điểm" });
+      }
+      
+      // Get the evaluation to check permissions
+      const evaluation = await storage.getEvaluation(existingScore.evaluationId);
+      if (!evaluation) {
+        return res.status(404).json({ message: "Không tìm thấy đánh giá" });
+      }
+      
+      // Users can only update scores for their own unit's evaluation
+      if (req.user!.role === "user" && evaluation.unitId !== req.user!.unitId) {
+        return res.status(403).json({ message: "Bạn chỉ có thể sửa điểm của đơn vị mình" });
+      }
+      
+      // Cluster leaders can only update scores for evaluations in their cluster
+      if (req.user!.role === "cluster_leader") {
+        const unit = await storage.getUnit(evaluation.unitId);
+        if (unit && unit.clusterId !== req.user!.clusterId) {
+          return res.status(403).json({ message: "Bạn chỉ có thể sửa điểm của cụm mình" });
+        }
+        
+        // If reassigning to a different evaluation, verify the new evaluation is also in their cluster
+        if (scoreData.evaluationId && scoreData.evaluationId !== existingScore.evaluationId) {
+          const newEvaluation = await storage.getEvaluation(scoreData.evaluationId);
+          if (!newEvaluation) {
+            return res.status(404).json({ message: "Không tìm thấy đánh giá mới" });
+          }
+          const newUnit = await storage.getUnit(newEvaluation.unitId);
+          if (!newUnit || newUnit.clusterId !== req.user!.clusterId) {
+            return res.status(403).json({ message: "Bạn chỉ có thể chuyển điểm đến đánh giá trong cụm của mình" });
+          }
+        }
+      }
+      
+      // Regular users cannot reassign scores to different evaluations
+      if (req.user!.role === "user" && scoreData.evaluationId && scoreData.evaluationId !== existingScore.evaluationId) {
+        return res.status(403).json({ message: "Bạn không có quyền chuyển điểm sang đánh giá khác" });
+      }
+      
+      const score = await storage.updateScore(req.params.id, scoreData);
+      res.json(score);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Dữ liệu không hợp lệ", errors: error.errors });
+      }
       next(error);
     }
   });

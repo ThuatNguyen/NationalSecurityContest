@@ -774,6 +774,183 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Batch create evaluations for all units in a period
+  app.post("/api/evaluation-periods/:id/create-evaluations", requireRole("admin", "cluster_leader"), async (req, res, next) => {
+    try {
+      const period = await storage.getEvaluationPeriod(req.params.id);
+      if (!period) {
+        return res.status(404).json({ message: "Không tìm thấy kỳ thi đua" });
+      }
+      
+      // Cluster leaders can only create evaluations for their cluster's period
+      if (req.user!.role === "cluster_leader" && period.clusterId !== req.user!.clusterId) {
+        return res.status(403).json({ message: "Bạn chỉ có thể tạo đánh giá cho kỳ thi đua của cụm mình" });
+      }
+      
+      // Get all units in the period's cluster
+      const units = await storage.getUnits(period.clusterId);
+      
+      // Create evaluations for each unit
+      const evaluations = [];
+      for (const unit of units) {
+        // Check if evaluation already exists
+        const existing = await storage.getEvaluations(req.params.id, unit.id);
+        if (existing.length === 0) {
+          const evaluation = await storage.createEvaluation({
+            periodId: req.params.id,
+            unitId: unit.id,
+            status: "draft",
+          });
+          evaluations.push(evaluation);
+        }
+      }
+      
+      res.json({ message: `Đã tạo ${evaluations.length} đánh giá`, evaluations });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Submit self-assessment (Unit user)
+  app.post("/api/evaluations/:id/submit", requireAuth, async (req, res, next) => {
+    try {
+      const evaluation = await storage.getEvaluation(req.params.id);
+      if (!evaluation) {
+        return res.status(404).json({ message: "Không tìm thấy đánh giá" });
+      }
+      
+      // Only unit users can submit their own evaluation
+      if (req.user!.role !== "user" || evaluation.unitId !== req.user!.unitId) {
+        return res.status(403).json({ message: "Bạn chỉ có thể nộp đánh giá của đơn vị mình" });
+      }
+      
+      // Can only submit from draft status
+      if (evaluation.status !== "draft") {
+        return res.status(400).json({ message: "Chỉ có thể nộp đánh giá ở trạng thái nháp" });
+      }
+      
+      const updated = await storage.updateEvaluation(req.params.id, { status: "submitted" });
+      res.json(updated);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Complete review 1 (Cluster leader)
+  app.post("/api/evaluations/:id/review1", requireRole("admin", "cluster_leader"), async (req, res, next) => {
+    try {
+      const evaluation = await storage.getEvaluation(req.params.id);
+      if (!evaluation) {
+        return res.status(404).json({ message: "Không tìm thấy đánh giá" });
+      }
+      
+      const unit = await storage.getUnit(evaluation.unitId);
+      if (!unit) {
+        return res.status(404).json({ message: "Không tìm thấy đơn vị" });
+      }
+      
+      // Cluster leaders can only review their cluster's evaluations
+      if (req.user!.role === "cluster_leader" && unit.clusterId !== req.user!.clusterId) {
+        return res.status(403).json({ message: "Bạn chỉ có thể thẩm định đánh giá của cụm mình" });
+      }
+      
+      // Can only review from submitted status
+      if (evaluation.status !== "submitted") {
+        return res.status(400).json({ message: "Chỉ có thể thẩm định đánh giá đã nộp" });
+      }
+      
+      const updated = await storage.updateEvaluation(req.params.id, { status: "review1_completed" });
+      res.json(updated);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Submit explanation (Unit user)
+  app.post("/api/evaluations/:id/explain", requireAuth, async (req, res, next) => {
+    try {
+      const evaluation = await storage.getEvaluation(req.params.id);
+      if (!evaluation) {
+        return res.status(404).json({ message: "Không tìm thấy đánh giá" });
+      }
+      
+      // Only unit users can submit explanation for their own evaluation
+      if (req.user!.role !== "user" || evaluation.unitId !== req.user!.unitId) {
+        return res.status(403).json({ message: "Bạn chỉ có thể giải trình cho đánh giá của đơn vị mình" });
+      }
+      
+      // Can only explain from review1_completed status
+      if (evaluation.status !== "review1_completed") {
+        return res.status(400).json({ message: "Chỉ có thể giải trình sau khi hoàn thành thẩm định lần 1" });
+      }
+      
+      const updated = await storage.updateEvaluation(req.params.id, { status: "explanation_submitted" });
+      res.json(updated);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Complete review 2 (Cluster leader)
+  app.post("/api/evaluations/:id/review2", requireRole("admin", "cluster_leader"), async (req, res, next) => {
+    try {
+      const evaluation = await storage.getEvaluation(req.params.id);
+      if (!evaluation) {
+        return res.status(404).json({ message: "Không tìm thấy đánh giá" });
+      }
+      
+      const unit = await storage.getUnit(evaluation.unitId);
+      if (!unit) {
+        return res.status(404).json({ message: "Không tìm thấy đơn vị" });
+      }
+      
+      // Cluster leaders can only review their cluster's evaluations
+      if (req.user!.role === "cluster_leader" && unit.clusterId !== req.user!.clusterId) {
+        return res.status(403).json({ message: "Bạn chỉ có thể thẩm định đánh giá của cụm mình" });
+      }
+      
+      // Can only review2 from explanation_submitted status
+      if (evaluation.status !== "explanation_submitted") {
+        return res.status(400).json({ message: "Chỉ có thể thẩm định lần 2 sau khi đơn vị giải trình" });
+      }
+      
+      const updated = await storage.updateEvaluation(req.params.id, { status: "review2_completed" });
+      res.json(updated);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Finalize evaluation (Admin/Cluster leader)
+  app.post("/api/evaluations/:id/finalize", requireRole("admin", "cluster_leader"), async (req, res, next) => {
+    try {
+      const evaluation = await storage.getEvaluation(req.params.id);
+      if (!evaluation) {
+        return res.status(404).json({ message: "Không tìm thấy đánh giá" });
+      }
+      
+      const unit = await storage.getUnit(evaluation.unitId);
+      if (!unit) {
+        return res.status(404).json({ message: "Không tìm thấy đơn vị" });
+      }
+      
+      // Cluster leaders can only finalize their cluster's evaluations
+      if (req.user!.role === "cluster_leader" && unit.clusterId !== req.user!.clusterId) {
+        return res.status(403).json({ message: "Bạn chỉ có thể hoàn tất đánh giá của cụm mình" });
+      }
+      
+      // Can only finalize from review2_completed status
+      if (evaluation.status !== "review2_completed") {
+        return res.status(400).json({ message: "Chỉ có thể hoàn tất sau khi hoàn thành thẩm định lần 2" });
+      }
+      
+      const updated = await storage.updateEvaluation(req.params.id, { status: "finalized" });
+      res.json(updated);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   // Score routes
   app.get("/api/scores", requireAuth, async (req, res, next) => {
     try {

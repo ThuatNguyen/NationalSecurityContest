@@ -27,7 +27,7 @@ import {
 
 export default function UnitsManagement() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedCluster, setSelectedCluster] = useState<string>("");
+  const [selectedCluster, setSelectedCluster] = useState<string>("ALL");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
   const [formData, setFormData] = useState<InsertUnit>({
@@ -46,7 +46,7 @@ export default function UnitsManagement() {
   const { data: units, isLoading } = useQuery({
     queryKey: ["/api/units", selectedCluster],
     queryFn: async () => {
-      const url = selectedCluster 
+      const url = selectedCluster && selectedCluster !== "ALL"
         ? `/api/units?clusterId=${selectedCluster}`
         : "/api/units";
       const response = await fetch(url, { credentials: "include" });
@@ -210,7 +210,7 @@ export default function UnitsManagement() {
                   <SelectValue placeholder="Tất cả cụm thi đua" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="" data-testid="option-all-clusters">Tất cả cụm thi đua</SelectItem>
+                  <SelectItem value="ALL" data-testid="option-all-clusters">Tất cả cụm thi đua</SelectItem>
                   {((clusters as Cluster[] | undefined) || []).map((cluster: Cluster) => (
                     <SelectItem key={cluster.id} value={cluster.id} data-testid={`option-cluster-${cluster.id}`}>
                       {cluster.name}

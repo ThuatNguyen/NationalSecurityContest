@@ -160,12 +160,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const requestedPath = path.join(uploadsDir, relativePath);
     const normalizedPath = path.normalize(requestedPath);
     
+    console.log('[FILE ACCESS DEBUG]', {
+      originalPath: req.path,
+      relativePath,
+      requestedPath,
+      normalizedPath,
+      exists: fs.existsSync(normalizedPath)
+    });
+    
     // Security: Ensure requested path is within uploads directory (with path separator check)
     if (!normalizedPath.startsWith(uploadsDir + path.sep) && normalizedPath !== uploadsDir) {
       return res.status(403).json({ message: "Truy cập bị từ chối" });
     }
     
     if (!fs.existsSync(normalizedPath)) {
+      console.log('[FILE NOT FOUND]', normalizedPath);
       return res.status(404).json({ message: "File không tồn tại" });
     }
     

@@ -20,13 +20,10 @@ import {
   ClipboardList, 
   Calendar, 
   FileText,
-  ClipboardCheck,
-  BarChart3,
-  History,
+  Settings,
+  ChevronDown,
   LogOut,
   Shield,
-  Settings,
-  ChevronDown
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import RoleBadge from "./RoleBadge";
@@ -35,6 +32,7 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useSession } from "@/lib/useSession";
 import { useQuery } from "@tanstack/react-query";
+import { LucideIcon } from "lucide-react";
 
 interface AppSidebarProps {
   role: "admin" | "cluster_leader" | "user";
@@ -48,6 +46,14 @@ interface AppSidebarProps {
   };
 }
 
+interface NavItem {
+  title: string;
+  url: string;
+  icon: LucideIcon;
+  testId: string;
+  allowedRoles: ("admin" | "cluster_leader" | "user")[];
+}
+
 interface Unit {
   id: string;
   name: string;
@@ -55,6 +61,66 @@ interface Unit {
   description?: string;
   createdAt: string;
 }
+
+interface Cluster {
+  id: string;
+  name: string;
+}
+
+const MAIN_NAV_ITEMS: NavItem[] = [
+  { 
+    title: "Tổng quan", 
+    url: "/", 
+    icon: LayoutDashboard, 
+    testId: "nav-dashboard",
+    allowedRoles: ["admin", "cluster_leader", "user"]
+  },
+  { 
+    title: "Kỳ thi đua", 
+    url: "/periods", 
+    icon: Calendar, 
+    testId: "nav-periods",
+    allowedRoles: ["admin", "cluster_leader", "user"]
+  },
+  { 
+    title: "Báo cáo", 
+    url: "/reports", 
+    icon: FileText, 
+    testId: "nav-reports",
+    allowedRoles: ["admin", "cluster_leader", "user"]
+  },
+];
+
+const SETTINGS_NAV_ITEMS: NavItem[] = [
+  { 
+    title: "Quản lý đơn vị", 
+    url: "/settings/units", 
+    icon: Building2, 
+    testId: "nav-units",
+    allowedRoles: ["admin", "cluster_leader"]
+  },
+  { 
+    title: "Quản lý cụm", 
+    url: "/settings/clusters", 
+    icon: Users, 
+    testId: "nav-clusters",
+    allowedRoles: ["admin"]
+  },
+  { 
+    title: "Tiêu chí thi đua", 
+    url: "/settings/criteria", 
+    icon: ClipboardList, 
+    testId: "nav-criteria",
+    allowedRoles: ["admin", "cluster_leader"]
+  },
+  { 
+    title: "Quản lý người dùng", 
+    url: "/settings/users", 
+    icon: Users, 
+    testId: "nav-users",
+    allowedRoles: ["admin"]
+  },
+];
 
 export function AppSidebar({ role, user }: AppSidebarProps) {
   const [location] = useLocation();
@@ -65,34 +131,14 @@ export function AppSidebar({ role, user }: AppSidebarProps) {
     enabled: !!user.unitId,
   });
 
-  const adminMenu = [
-    { title: "Tổng quan", url: "/", icon: LayoutDashboard, testId: "nav-dashboard" },
-    { title: "Kỳ thi đua", url: "/periods", icon: Calendar, testId: "nav-periods" },
-    { title: "Báo cáo", url: "/reports", icon: FileText, testId: "nav-reports" },
-  ];
+  const { data: cluster } = useQuery<Cluster>({
+    queryKey: ['/api/clusters', user.clusterId],
+    enabled: !!user.clusterId && role !== "admin",
+  });
 
-  const adminSettingsMenu = [
-    { title: "Quản lý đơn vị", url: "/settings/units", icon: Building2, testId: "nav-units" },
-    { title: "Quản lý cụm", url: "/settings/clusters", icon: Users, testId: "nav-clusters" },
-    { title: "Tiêu chí thi đua", url: "/settings/criteria", icon: ClipboardList, testId: "nav-criteria" },
-    { title: "Quản lý người dùng", url: "/settings/users", icon: Users, testId: "nav-users" },
-  ];
-
-  const clusterLeaderMenu = [
-    { title: "Tổng quan", url: "/", icon: LayoutDashboard, testId: "nav-dashboard" },
-    { title: "Đơn vị của tôi", url: "/my-units", icon: Building2, testId: "nav-my-units" },
-    { title: "Chấm điểm cụm", url: "/scoring", icon: ClipboardCheck, testId: "nav-scoring" },
-    { title: "Báo cáo cụm", url: "/cluster-reports", icon: BarChart3, testId: "nav-cluster-reports" },
-  ];
-
-  const userMenu = [
-    { title: "Tổng quan", url: "/", icon: LayoutDashboard, testId: "nav-dashboard" },
-    { title: "Tự chấm điểm", url: "/self-scoring", icon: ClipboardCheck, testId: "nav-self-scoring" },
-    { title: "Kết quả", url: "/results", icon: BarChart3, testId: "nav-results" },
-    { title: "Lịch sử", url: "/history", icon: History, testId: "nav-history" },
-  ];
-
-  const menuItems = role === "admin" ? adminMenu : role === "cluster_leader" ? clusterLeaderMenu : userMenu;
+  const visibleMainItems = MAIN_NAV_ITEMS.filter(item => item.allowedRoles.includes(role));
+  const visibleSettingsItems = SETTINGS_NAV_ITEMS.filter(item => item.allowedRoles.includes(role));
+  const hasSettingsAccess = visibleSettingsItems.length > 0;
 
   return (
     <Sidebar>
@@ -113,7 +159,7 @@ export function AppSidebar({ role, user }: AppSidebarProps) {
           <SidebarGroupLabel>Menu</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {menuItems.map((item) => (
+              {visibleMainItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={location === item.url} data-testid={item.testId}>
                     <Link href={item.url}>
@@ -124,7 +170,7 @@ export function AppSidebar({ role, user }: AppSidebarProps) {
                 </SidebarMenuItem>
               ))}
               
-              {role === "admin" && (
+              {hasSettingsAccess && (
                 <Collapsible defaultOpen className="group/collapsible">
                   <SidebarMenuItem>
                     <CollapsibleTrigger asChild>
@@ -136,7 +182,7 @@ export function AppSidebar({ role, user }: AppSidebarProps) {
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <SidebarMenuSub>
-                        {adminSettingsMenu.map((item) => (
+                        {visibleSettingsItems.map((item) => (
                           <SidebarMenuSubItem key={item.title}>
                             <SidebarMenuSubButton asChild isActive={location === item.url} data-testid={item.testId}>
                               <Link href={item.url}>
@@ -166,6 +212,7 @@ export function AppSidebar({ role, user }: AppSidebarProps) {
             </Avatar>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate" data-testid="text-username">{user.fullName}</p>
+              {cluster && <p className="text-xs text-muted-foreground truncate">{cluster.name}</p>}
               {unit && <p className="text-xs text-muted-foreground truncate">{unit.name}</p>}
             </div>
           </div>

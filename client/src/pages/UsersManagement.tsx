@@ -217,6 +217,40 @@ export default function UsersManagement() {
       return;
     }
 
+    // Role-based validation for clusterId and unitId
+    if (formData.role === "admin") {
+      if (formData.clusterId || formData.unitId) {
+        toast({
+          title: "Lỗi",
+          description: "Quản trị viên không được gán vào cụm hoặc đơn vị",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    if (formData.role === "cluster_leader") {
+      if (!formData.clusterId) {
+        toast({
+          title: "Lỗi",
+          description: "Cụm trưởng phải được gán vào một cụm",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    if (formData.role === "user") {
+      if (!formData.unitId) {
+        toast({
+          title: "Lỗi",
+          description: "Người dùng đơn vị phải được gán vào một đơn vị",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     const submitData: any = {
       username: formData.username,
       fullName: formData.fullName,
@@ -396,9 +430,15 @@ export default function UsersManagement() {
               <Label htmlFor="role">Vai trò *</Label>
               <Select
                 value={formData.role}
-                onValueChange={(value: "admin" | "cluster_leader" | "user") =>
-                  setFormData({ ...formData, role: value })
-                }
+                onValueChange={(value: "admin" | "cluster_leader" | "user") => {
+                  // Reset clusterId and unitId when changing role
+                  setFormData({ 
+                    ...formData, 
+                    role: value,
+                    clusterId: value === "admin" ? "" : formData.clusterId,
+                    unitId: value === "admin" || value === "cluster_leader" ? "" : formData.unitId
+                  });
+                }}
               >
                 <SelectTrigger data-testid="select-role">
                   <SelectValue />
@@ -409,14 +449,29 @@ export default function UsersManagement() {
                   <SelectItem value="user">Người dùng</SelectItem>
                 </SelectContent>
               </Select>
+              {formData.role === "admin" && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Quản trị viên có quyền truy cập toàn bộ hệ thống
+                </p>
+              )}
+              {formData.role === "cluster_leader" && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Cụm trưởng chỉ quản lý các đơn vị trong cụm được gán
+                </p>
+              )}
+              {formData.role === "user" && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Người dùng đơn vị chỉ thao tác với dữ liệu của đơn vị được gán
+                </p>
+              )}
             </div>
-            {formData.role !== "admin" && (
+            {formData.role === "cluster_leader" && (
               <div className="space-y-2">
-                <Label htmlFor="cluster">Cụm</Label>
+                <Label htmlFor="cluster">Cụm *</Label>
                 <Select
                   value={formData.clusterId}
                   onValueChange={(value) =>
-                    setFormData({ ...formData, clusterId: value, unitId: "" })
+                    setFormData({ ...formData, clusterId: value })
                   }
                 >
                   <SelectTrigger data-testid="select-cluster">
@@ -433,25 +488,48 @@ export default function UsersManagement() {
               </div>
             )}
             {formData.role === "user" && (
-              <div className="space-y-2">
-                <Label htmlFor="unit">Đơn vị</Label>
-                <Select
-                  value={formData.unitId}
-                  onValueChange={(value) => setFormData({ ...formData, unitId: value })}
-                  disabled={!formData.clusterId}
-                >
-                  <SelectTrigger data-testid="select-unit">
-                    <SelectValue placeholder="Chọn đơn vị..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableUnits.map((unit) => (
-                      <SelectItem key={unit.id} value={unit.id}>
-                        {unit.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="cluster">Cụm</Label>
+                  <Select
+                    value={formData.clusterId}
+                    onValueChange={(value) =>
+                      setFormData({ ...formData, clusterId: value, unitId: "" })
+                    }
+                  >
+                    <SelectTrigger data-testid="select-cluster">
+                      <SelectValue placeholder="Chọn cụm..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clusters.map((cluster) => (
+                        <SelectItem key={cluster.id} value={cluster.id}>
+                          {cluster.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Chọn cụm để lọc danh sách đơn vị</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="unit">Đơn vị *</Label>
+                  <Select
+                    value={formData.unitId}
+                    onValueChange={(value) => setFormData({ ...formData, unitId: value })}
+                    disabled={!formData.clusterId}
+                  >
+                    <SelectTrigger data-testid="select-unit">
+                      <SelectValue placeholder="Chọn đơn vị..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableUnits.map((unit) => (
+                        <SelectItem key={unit.id} value={unit.id}>
+                          {unit.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
             )}
             <DialogFooter className="gap-2">
               <Button

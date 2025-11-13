@@ -111,6 +111,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Tên đăng nhập đã tồn tại" });
       }
 
+      // Role-based validation for clusterId and unitId
+      if (userData.role === "admin") {
+        if (userData.clusterId || userData.unitId) {
+          return res.status(400).json({ message: "Quản trị viên không được gán vào cụm hoặc đơn vị" });
+        }
+      }
+      
+      if (userData.role === "cluster_leader") {
+        if (!userData.clusterId) {
+          return res.status(400).json({ message: "Cụm trưởng phải được gán vào một cụm" });
+        }
+      }
+      
+      if (userData.role === "user") {
+        if (!userData.unitId) {
+          return res.status(400).json({ message: "Người dùng đơn vị phải được gán vào một đơn vị" });
+        }
+      }
+
       const hashedPassword = await bcrypt.hash(userData.password, 10);
       const user = await storage.createUser({
         ...userData,
@@ -201,11 +220,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Validate role-specific requirements
-      if (userData.role === "cluster_leader" && !userData.clusterId && !existingUser.clusterId) {
-        return res.status(400).json({ message: "Cụm trưởng phải được gán vào một cụm" });
+      const finalRole = userData.role || existingUser.role;
+      const finalClusterId = userData.clusterId !== undefined ? userData.clusterId : existingUser.clusterId;
+      const finalUnitId = userData.unitId !== undefined ? userData.unitId : existingUser.unitId;
+      
+      if (finalRole === "admin") {
+        if (finalClusterId || finalUnitId) {
+          return res.status(400).json({ message: "Quản trị viên không được gán vào cụm hoặc đơn vị" });
+        }
       }
-      if (userData.role === "user" && !userData.unitId && !existingUser.unitId) {
-        return res.status(400).json({ message: "Người dùng đơn vị phải được gán vào một đơn vị" });
+      
+      if (finalRole === "cluster_leader") {
+        if (!finalClusterId) {
+          return res.status(400).json({ message: "Cụm trưởng phải được gán vào một cụm" });
+        }
+      }
+      
+      if (finalRole === "user") {
+        if (!finalUnitId) {
+          return res.status(400).json({ message: "Người dùng đơn vị phải được gán vào một đơn vị" });
+        }
       }
 
       // Hash password if provided

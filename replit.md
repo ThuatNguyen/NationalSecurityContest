@@ -15,11 +15,22 @@ This is a web application for scoring competitive evaluations in the Vietnamese 
 
 ## Recent Changes
 
+**November 2025 - User Management Validation & UX Improvements**
+- Implemented comprehensive role-based validation for user creation/updates:
+  - Admin: Cannot be assigned to cluster or unit (full system access)
+  - Cluster Leader: Must be assigned to a cluster
+  - Unit User: Must be assigned to a unit
+- Enhanced UX with context-aware helper messages and dynamic form fields
+- Dual validation (frontend + backend) for security and user experience
+- Auto-reset clusterId/unitId when role changes to prevent stale data
+- E2E tested: all validation scenarios verified
+
 **November 2025 - Criteria Management Implementation**
 - Implemented comprehensive criteria management system with dual-level hierarchy
 - Added CRUD operations for criteria groups and individual criteria
 - Implemented role-based UI permissions (admin/cluster_leader can manage, users read-only)
 - Fixed critical bugs: query cache invalidation, empty groups rendering, groupId validation
+- Added UX improvements: alert messages, tooltips for disabled buttons
 - All Vietnamese interface with Material Design 3 styling
 - E2E tested with Playwright: all core workflows verified
 

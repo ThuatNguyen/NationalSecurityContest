@@ -5,6 +5,18 @@ This web application digitizes and streamlines the evaluation process for the Vi
 
 ## Recent Changes
 
+### 2025-01-13: Fixed File Attachment Access Issue
+- **Problem**: Users clicking file attachment icons got "file not found" error in new browser tab
+- **Root Cause**: Using `window.open()` to open files caused session cookies to not be sent properly in certain contexts
+- **Solution**: 
+  - Changed from programmatic `window.open()` to native `<a>` tag with `target="_blank"`
+  - Browsers handle authentication better with anchor-based navigation
+  - Session cookies (sameSite='lax') are properly sent with same-site anchor navigation
+  - Kept `/uploads` route protected with `requireAuth` middleware for security
+- **Security Note**: Avoided `sameSite='none'` which would introduce CSRF vulnerability
+- **Impact**: Users can now view file attachments correctly without authentication errors
+- **Test Result**: Verified with e2e test - authenticated file access works, returns 200 OK with proper Content-Type
+
 ### 2025-01-13: Fixed Cluster-Period Mismatch Issue
 - **Problem**: Admin selecting "Khối hậu cần" cluster saw criteria from different clusters because evaluation periods weren't filtered by selected cluster
 - **Root Cause**: `filteredPeriods` only filtered by year and user role, not by admin's selected cluster

@@ -155,9 +155,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/uploads', requireAuth, (req, res, next) => {
     const uploadsDir = path.join(process.cwd(), 'uploads');
     
-    // Debug logging
-    console.log('[FILE ACCESS] User:', req.user?.username, 'Path:', req.path, 'Session:', req.isAuthenticated());
-    
     // Remove leading slash from req.path to prevent absolute path issues
     const relativePath = req.path.startsWith('/') ? req.path.slice(1) : req.path;
     const requestedPath = path.join(uploadsDir, relativePath);

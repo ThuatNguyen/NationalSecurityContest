@@ -338,42 +338,52 @@ export default function CriteriaManagement() {
       </div>
 
       <Card className="p-4">
-        <div className="flex flex-wrap gap-4">
-          <div className="flex-1 min-w-[200px]">
-            <Label htmlFor="filter-year-criteria" className="text-xs font-semibold uppercase tracking-wide mb-2 block">
-              Năm áp dụng
-            </Label>
-            <Select value={selectedYear} onValueChange={setSelectedYear}>
-              <SelectTrigger id="filter-year-criteria" data-testid="select-year-criteria">
-                <SelectValue placeholder="Chọn năm" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="2025">2025</SelectItem>
-                <SelectItem value="2024">2024</SelectItem>
-                <SelectItem value="2023">2023</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex-1 min-w-[200px]">
-            <Label htmlFor="filter-cluster-criteria" className="text-xs font-semibold uppercase tracking-wide mb-2 block">
-              Cụm thi đua
-            </Label>
-            <Select 
-              value={selectedClusterId} 
-              onValueChange={setSelectedClusterId}
-              disabled={clustersLoading || user?.role === "cluster_leader"}
-            >
-              <SelectTrigger id="filter-cluster-criteria" data-testid="select-cluster-criteria">
-                <SelectValue placeholder={clustersLoading ? "Đang tải..." : "Chọn cụm"} />
-              </SelectTrigger>
-              <SelectContent>
-                {clusters?.map((cluster) => (
-                  <SelectItem key={cluster.id} value={cluster.id}>
-                    {cluster.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        <div className="space-y-4">
+          {user?.role === "cluster_leader" && selectedClusterId && (
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                Bạn đang xem dữ liệu cụm: <strong>{clusters?.find(c => c.id === selectedClusterId)?.name}</strong>
+              </AlertDescription>
+            </Alert>
+          )}
+          <div className="flex flex-wrap gap-4">
+            <div className="flex-1 min-w-[200px]">
+              <Label htmlFor="filter-year-criteria" className="text-xs font-semibold uppercase tracking-wide mb-2 block">
+                Năm áp dụng
+              </Label>
+              <Select value={selectedYear} onValueChange={setSelectedYear}>
+                <SelectTrigger id="filter-year-criteria" data-testid="select-year-criteria">
+                  <SelectValue placeholder="Chọn năm" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="2025">2025</SelectItem>
+                  <SelectItem value="2024">2024</SelectItem>
+                  <SelectItem value="2023">2023</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex-1 min-w-[200px]">
+              <Label htmlFor="filter-cluster-criteria" className="text-xs font-semibold uppercase tracking-wide mb-2 block">
+                Cụm thi đua {user?.role === "cluster_leader" && "(Cụm của bạn)"}
+              </Label>
+              <Select 
+                value={selectedClusterId} 
+                onValueChange={setSelectedClusterId}
+                disabled={clustersLoading || user?.role === "cluster_leader"}
+              >
+                <SelectTrigger id="filter-cluster-criteria" data-testid="select-cluster-criteria">
+                  <SelectValue placeholder={clustersLoading ? "Đang tải..." : "Chọn cụm"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {clusters?.map((cluster) => (
+                    <SelectItem key={cluster.id} value={cluster.id}>
+                      {cluster.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
       </Card>

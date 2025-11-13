@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useSession } from "@/lib/useSession";
 import type { Unit, InsertUnit, Cluster } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, Edit, Trash2, Loader2 } from "lucide-react";
+import { Plus, Search, Edit, Trash2, Loader2, Info } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -24,8 +25,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function UnitsManagement() {
+  const { user } = useSession();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCluster, setSelectedCluster] = useState<string>("ALL");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -36,6 +39,13 @@ export default function UnitsManagement() {
     description: "",
   });
   const { toast } = useToast();
+
+  // Auto-select cluster for cluster_leader
+  useEffect(() => {
+    if (user?.role === "cluster_leader" && user.clusterId && selectedCluster === "ALL") {
+      setSelectedCluster(user.clusterId);
+    }
+  }, [user, selectedCluster]);
 
   // Fetch clusters for dropdown
   const { data: clusters } = useQuery({
@@ -201,34 +211,48 @@ export default function UnitsManagement() {
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <CardTitle className="text-lg">Danh sách Đơn vị</CardTitle>
-            <div className="flex items-center gap-3 flex-wrap">
-              {/* Cluster filter */}
-              <Select value={selectedCluster} onValueChange={setSelectedCluster}>
-                <SelectTrigger className="w-64" data-testid="select-cluster-filter">
-                  <SelectValue placeholder="Tất cả cụm thi đua" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL" data-testid="option-all-clusters">Tất cả cụm thi đua</SelectItem>
-                  {((clusters as Cluster[] | undefined) || []).map((cluster: Cluster) => (
-                    <SelectItem key={cluster.id} value={cluster.id} data-testid={`option-cluster-${cluster.id}`}>
-                      {cluster.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              
-              {/* Search */}
-              <div className="relative w-80">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Tìm kiếm theo tên hoặc mô tả..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9"
-                  data-testid="input-search"
-                />
+          <div className="space-y-4">
+            {user?.role === "cluster_leader" && selectedCluster !== "ALL" && (
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  Bạn đang xem dữ liệu cụm: <strong>{((clusters as Cluster[] | undefined) || []).find(c => c.id === selectedCluster)?.name}</strong>
+                </AlertDescription>
+              </Alert>
+            )}
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <CardTitle className="text-lg">Danh sách Đơn vị</CardTitle>
+              <div className="flex items-center gap-3 flex-wrap">
+                {/* Cluster filter */}
+                <Select 
+                  value={selectedCluster} 
+                  onValueChange={setSelectedCluster}
+                  disabled={user?.role === "cluster_leader"}
+                >
+                  <SelectTrigger className="w-64" data-testid="select-cluster-filter">
+                    <SelectValue placeholder="Tất cả cụm thi đua" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL" data-testid="option-all-clusters">Tất cả cụm thi đua</SelectItem>
+                    {((clusters as Cluster[] | undefined) || []).map((cluster: Cluster) => (
+                      <SelectItem key={cluster.id} value={cluster.id} data-testid={`option-cluster-${cluster.id}`}>
+                        {cluster.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                {/* Search */}
+                <div className="relative w-80">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Tìm kiếm theo tên hoặc mô tả..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-9"
+                    data-testid="input-search"
+                  />
+                </div>
               </div>
             </div>
           </div>

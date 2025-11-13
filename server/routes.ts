@@ -101,8 +101,8 @@ function requireRole(...roles: string[]) {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Authentication routes
-  // Only admins can create users (removed public registration to prevent privilege escalation)
-  app.post("/api/auth/register", requireRole("admin"), async (req, res, next) => {
+  // Admins can create any user; cluster_leaders can only create users in their cluster
+  app.post("/api/auth/register", requireRole("admin", "cluster_leader"), async (req, res, next) => {
     try {
       const userData = insertUserSchema.parse(req.body);
       
@@ -111,22 +111,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Tên đăng nhập đã tồn tại" });
       }
 
-      // Role-based validation for clusterId and unitId
-      if (userData.role === "admin") {
-        if (userData.clusterId || userData.unitId) {
-          return res.status(400).json({ message: "Quản trị viên không được gán vào cụm hoặc đơn vị" });
+      // Cluster leader constraints
+      if (req.user!.role === "cluster_leader") {
+        // Cluster leaders can only create users with role "user"
+        if (userData.role !== "user") {
+          return res.status(403).json({ message: "Cụm trưởng chỉ có thể tạo người dùng đơn vị" });
         }
-      }
-      
-      if (userData.role === "cluster_leader") {
-        if (!userData.clusterId) {
-          return res.status(400).json({ message: "Cụm trưởng phải được gán vào một cụm" });
+        
+        // Force cluster to leader's cluster
+        if (!req.user!.clusterId) {
+          return res.status(400).json({ message: "Cụm trưởng chưa được gán vào cụm" });
         }
-      }
-      
-      if (userData.role === "user") {
+        
+        // Verify unitId belongs to cluster leader's cluster
         if (!userData.unitId) {
-          return res.status(400).json({ message: "Người dùng đơn vị phải được gán vào một đơn vị" });
+          return res.status(400).json({ message: "Phải chọn đơn vị cho người dùng" });
+        }
+        
+        const unit = await storage.getUnit(userData.unitId);
+        if (!unit || unit.clusterId !== req.user!.clusterId) {
+          return res.status(403).json({ message: "Đơn vị không thuộc cụm của bạn" });
+        }
+        
+        // Force clusterId to leader's cluster (in case frontend sends wrong value)
+        userData.clusterId = req.user!.clusterId;
+      }
+
+      // Admin validation (unchanged)
+      if (req.user!.role === "admin") {
+        if (userData.role === "admin") {
+          if (userData.clusterId || userData.unitId) {
+            return res.status(400).json({ message: "Quản trị viên không được gán vào cụm hoặc đơn vị" });
+          }
+        }
+        
+        if (userData.role === "cluster_leader") {
+          if (!userData.clusterId) {
+            return res.status(400).json({ message: "Cụm trưởng phải được gán vào một cụm" });
+          }
+        }
+        
+        if (userData.role === "user") {
+          if (!userData.unitId) {
+            return res.status(400).json({ message: "Người dùng đơn vị phải được gán vào một đơn vị" });
+          }
         }
       }
 

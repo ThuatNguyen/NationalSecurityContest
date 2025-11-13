@@ -41,7 +41,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, Pencil, Trash2, Search, Info } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import RoleBadge from "@/components/RoleBadge";
 
 interface User {
@@ -297,9 +297,37 @@ export default function UsersManagement() {
     user.fullName.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const availableUnits = formData.clusterId
-    ? allUnits.filter(u => u.clusterId === formData.clusterId)
-    : allUnits;
+  // Cluster leader restrictions
+  const isClusterLeader = currentUser?.role === "cluster_leader";
+  const isCreating = !selectedUser;
+  const forcedClusterId = isClusterLeader ? currentUser?.clusterId ?? "" : "";
+  
+  // Auto-fill cluster for cluster_leader when creating
+  useEffect(() => {
+    if (isClusterLeader && isCreating && forcedClusterId && formData.role === "user") {
+      setFormData(prev => ({ ...prev, clusterId: forcedClusterId }));
+    }
+  }, [isClusterLeader, isCreating, forcedClusterId, formData.role]);
+
+  // Role options: cluster_leader creating can only choose "user"
+  const roleOptions = useMemo(() => {
+    if (isClusterLeader && isCreating) {
+      return [{ value: "user" as const, label: "Người dùng" }];
+    }
+    return [
+      { value: "admin" as const, label: "Quản trị viên" },
+      { value: "cluster_leader" as const, label: "Cụm trưởng" },
+      { value: "user" as const, label: "Người dùng" }
+    ];
+  }, [isClusterLeader, isCreating]);
+
+  // Filter units by effective cluster
+  const effectiveClusterId = formData.clusterId || forcedClusterId;
+  const availableUnits = useMemo(() => {
+    return effectiveClusterId 
+      ? allUnits.filter(u => u.clusterId === effectiveClusterId)
+      : allUnits;
+  }, [allUnits, effectiveClusterId]);
 
   return (
     <div className="space-y-6">
@@ -470,14 +498,17 @@ export default function UsersManagement() {
                     unitId: value === "admin" || value === "cluster_leader" ? "" : formData.unitId
                   });
                 }}
+                disabled={isClusterLeader && isCreating}
               >
                 <SelectTrigger data-testid="select-role">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="admin">Quản trị viên</SelectItem>
-                  <SelectItem value="cluster_leader">Cụm trưởng</SelectItem>
-                  <SelectItem value="user">Người dùng</SelectItem>
+                  {roleOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               {formData.role === "admin" && (
@@ -523,33 +554,42 @@ export default function UsersManagement() {
             )}
             {formData.role === "user" && (
               <>
-                <div className="space-y-2">
-                  <Label htmlFor="cluster">Cụm</Label>
-                  <Select
-                    value={formData.clusterId}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, clusterId: value, unitId: "" })
-                    }
-                  >
-                    <SelectTrigger data-testid="select-cluster">
-                      <SelectValue placeholder="Chọn cụm..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {clusters.map((cluster) => (
-                        <SelectItem key={cluster.id} value={cluster.id}>
-                          {cluster.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">Chọn cụm để lọc danh sách đơn vị</p>
-                </div>
+                {isClusterLeader && isCreating ? (
+                  <div className="space-y-2">
+                    <Label>Cụm</Label>
+                    <div className="text-sm text-muted-foreground p-3 bg-muted rounded-md" data-testid="text-cluster-info">
+                      Người dùng mới được gán cho cụm: <strong>{clusters.find(c => c.id === forcedClusterId)?.name}</strong>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label htmlFor="cluster">Cụm</Label>
+                    <Select
+                      value={formData.clusterId}
+                      onValueChange={(value) =>
+                        setFormData({ ...formData, clusterId: value, unitId: "" })
+                      }
+                    >
+                      <SelectTrigger data-testid="select-cluster">
+                        <SelectValue placeholder="Chọn cụm..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {clusters.map((cluster) => (
+                          <SelectItem key={cluster.id} value={cluster.id}>
+                            {cluster.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">Chọn cụm để lọc danh sách đơn vị</p>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="unit">Đơn vị *</Label>
                   <Select
                     value={formData.unitId}
                     onValueChange={(value) => setFormData({ ...formData, unitId: value })}
-                    disabled={!formData.clusterId}
+                    disabled={!effectiveClusterId}
                   >
                     <SelectTrigger data-testid="select-unit">
                       <SelectValue placeholder="Chọn đơn vị..." />
@@ -562,6 +602,9 @@ export default function UsersManagement() {
                       ))}
                     </SelectContent>
                   </Select>
+                  {isClusterLeader && (
+                    <p className="text-xs text-muted-foreground">Chỉ hiển thị đơn vị trong cụm của bạn</p>
+                  )}
                 </div>
               </>
             )}

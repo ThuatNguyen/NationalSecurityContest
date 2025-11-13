@@ -15,6 +15,25 @@ This is a web application for scoring competitive evaluations in the Vietnamese 
 
 ## Recent Changes
 
+**November 2025 - Null Handling Bug Fixes in Scoring Displays**
+- **Critical Bug Fix:** Fixed runtime crashes caused by NULL score values calling toFixed()
+  - **Root Cause:** `!== undefined` check doesn't guard against NULL in JavaScript (NULL !== undefined → true)
+  - **Affected Components:** EvaluationPeriods.tsx, ReviewModal.tsx
+- **EvaluationPeriods.tsx Fixes:**
+  - Changed all score displays from `item.score !== undefined` to `typeof item.score === 'number'`
+  - Applied to: selfScore, review1Score, review2Score, finalScore columns
+  - NULL scores now safely display as "-" or "Chấm điểm" placeholders
+- **ReviewModal.tsx Fix:**
+  - Changed selfScore reference section check from `selfScore !== undefined` to `typeof selfScore === 'number'`
+  - Prevents crash when opening review modal with NULL self-score
+  - Reference section hidden when selfScore is NULL (no error overlay)
+- **E2E Testing Verification:**
+  - All workflows tested with Playwright using test123/admin123 account
+  - Verified NULL score rendering across all columns
+  - Verified scoring modal opens/closes without crashes
+  - Verified user role permissions (can score, cannot review)
+- **Production Ready:** Architect reviewed and approved - no latent null issues detected
+
 **November 2025 - Cluster Leader User Creation with Restrictions**
 - **Extended Permissions:** Cluster leaders can now create users within their cluster
   - Backend: POST /api/auth/register now accepts cluster_leader role

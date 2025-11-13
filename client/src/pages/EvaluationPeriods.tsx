@@ -1,12 +1,23 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { FileText, RefreshCw } from "lucide-react";
+import { FileText, RefreshCw, Send } from "lucide-react";
 import { useState, useMemo, useEffect, Fragment } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useSession } from "@/lib/useSession";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import ScoringModal from "@/components/ScoringModal";
 import ReviewModal from "@/components/ReviewModal";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -65,6 +76,7 @@ export default function EvaluationPeriods() {
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [selectedClusterId, setSelectedClusterId] = useState<string>('');
   const [selectedUnitId, setSelectedUnitId] = useState<string>('');
+  const [submitDialogOpen, setSubmitDialogOpen] = useState(false);
 
   // Query clusters
   const { 
@@ -412,6 +424,66 @@ export default function EvaluationPeriods() {
     });
   };
 
+  // Mutation for submitting evaluation
+  const submitEvaluationMutation = useMutation({
+    mutationFn: async () => {
+      // Validate context
+      const currentPeriodId = selectedPeriod?.id;
+      const currentUnitId = selectedUnitId;
+      
+      if (!currentPeriodId || !currentUnitId) {
+        throw new Error('Thiếu thông tin kỳ thi đua hoặc đơn vị.');
+      }
+
+      // Ensure evaluation exists (create if needed)
+      let evaluationId = summary?.evaluation?.id;
+      if (!evaluationId) {
+        console.log('[SUBMIT] No evaluation found, creating one via ensure endpoint');
+        const ensureRes = await apiRequest('POST', '/api/evaluations/ensure', {
+          periodId: currentPeriodId,
+          unitId: currentUnitId,
+        });
+        const ensureData = await ensureRes.json();
+        evaluationId = ensureData.id;
+        console.log('[SUBMIT] Evaluation ensured, id:', evaluationId);
+      }
+
+      // apiRequest will throw on non-2xx, so we can safely await the response
+      const res = await apiRequest('POST', `/api/evaluations/${evaluationId}/submit`, {});
+      
+      // If we get here, response is 2xx, safe to parse
+      if (!res.ok) {
+        throw new Error('Không thể nộp bài. Vui lòng thử lại.');
+      }
+      
+      const result = await res.json();
+      
+      return { result, periodId: currentPeriodId, unitId: currentUnitId };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ 
+        queryKey: ['/api/evaluation-periods', data.periodId, 'units', data.unitId, 'summary'] 
+      });
+      toast({
+        title: "Thành công",
+        description: "Đã nộp bài thành công. Đánh giá đang chờ thẩm định.",
+      });
+      setSubmitDialogOpen(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Lỗi",
+        description: error.message || "Không thể nộp bài",
+        variant: "destructive",
+      });
+      setSubmitDialogOpen(false);
+    },
+  });
+
+  const handleSubmitEvaluation = () => {
+    submitEvaluationMutation.mutate();
+  };
+
   // Calculate group totals
   const calculateGroupTotal = (items: Criteria[], field: keyof Criteria) => {
     return items.reduce((sum, item) => {
@@ -588,7 +660,58 @@ export default function EvaluationPeriods() {
           <p className="text-muted-foreground">Không có dữ liệu thi đua cho kỳ này</p>
         </div>
       ) : (
-        <div className="border rounded-md overflow-hidden">
+        <>
+          {/* Status and Action Strip */}
+          {summary.evaluation && (
+            <div className="flex items-center justify-between gap-4 p-4 bg-card border rounded-md mb-4">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-muted-foreground">Trạng thái:</span>
+                <Badge 
+                  variant={
+                    summary.evaluation.status === 'draft' ? 'secondary' :
+                    summary.evaluation.status === 'submitted' ? 'default' :
+                    summary.evaluation.status === 'review1_completed' ? 'default' :
+                    summary.evaluation.status === 'explanation_submitted' ? 'default' :
+                    summary.evaluation.status === 'review2_completed' ? 'default' :
+                    summary.evaluation.status === 'finalized' ? 'default' : 'secondary'
+                  }
+                  data-testid="badge-evaluation-status"
+                >
+                  {
+                    summary.evaluation.status === 'draft' ? 'Nháp' :
+                    summary.evaluation.status === 'submitted' ? 'Đã nộp' :
+                    summary.evaluation.status === 'review1_completed' ? 'Đã thẩm định lần 1' :
+                    summary.evaluation.status === 'explanation_submitted' ? 'Đã giải trình' :
+                    summary.evaluation.status === 'review2_completed' ? 'Đã thẩm định lần 2' :
+                    summary.evaluation.status === 'finalized' ? 'Hoàn tất' : summary.evaluation.status
+                  }
+                </Badge>
+              </div>
+              
+              {user.role === 'user' && summary.evaluation.status === 'draft' && selectedPeriod && selectedUnitId && (
+                <Button
+                  variant="default"
+                  onClick={() => setSubmitDialogOpen(true)}
+                  disabled={submitEvaluationMutation.isPending}
+                  data-testid="button-submit-evaluation"
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  {submitEvaluationMutation.isPending ? 'Đang nộp...' : 'Nộp bài'}
+                </Button>
+              )}
+            </div>
+          )}
+
+          {/* Disable scoring info when not in draft */}
+          {summary.evaluation && summary.evaluation.status !== 'draft' && user.role === 'user' && (
+            <Alert className="mb-4">
+              <AlertDescription>
+                Đánh giá đã được nộp. Bạn không thể chỉnh sửa điểm tự chấm.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <div className="border rounded-md overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="sticky top-0 bg-muted">
@@ -649,7 +772,7 @@ export default function EvaluationPeriods() {
                             {item.maxScore}
                           </td>
                           <td className="px-4 py-3 text-center border-l">
-                            {user.role === "user" ? (
+                            {user.role === "user" && summary.evaluation?.status === 'draft' && selectedPeriod && selectedUnitId ? (
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -754,31 +877,54 @@ export default function EvaluationPeriods() {
             </table>
           </div>
         </div>
-      )}
 
-      {selectedCriteria && (
-        <>
-          <ScoringModal
-            open={scoringModalOpen}
-            onClose={() => setScoringModalOpen(false)}
-            criteriaName={selectedCriteria.name}
-            maxScore={selectedCriteria.maxScore}
-            currentScore={selectedCriteria.selfScore}
-            currentFile={selectedCriteria.selfScoreFile}
-            onSave={handleSaveScore}
-          />
-          <ReviewModal
-            open={reviewModalOpen}
-            onClose={() => setReviewModalOpen(false)}
-            criteriaName={selectedCriteria.name}
-            maxScore={selectedCriteria.maxScore}
-            selfScore={selectedCriteria.selfScore}
-            currentReviewScore={reviewType === "review1" ? selectedCriteria.review1Score : selectedCriteria.review2Score}
-            currentComment={reviewType === "review1" ? selectedCriteria.review1Comment : selectedCriteria.review2Comment}
-            currentFile={reviewType === "review1" ? selectedCriteria.review1File : selectedCriteria.review2File}
-            reviewType={reviewType}
-            onSave={handleSaveReview}
-          />
+        {/* Submit Confirmation Dialog */}
+        <AlertDialog open={submitDialogOpen} onOpenChange={setSubmitDialogOpen}>
+          <AlertDialogContent data-testid="dialog-submit-confirmation">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Xác nhận nộp bài</AlertDialogTitle>
+              <AlertDialogDescription>
+                Bạn có chắc chắn muốn nộp bài đánh giá không? Sau khi nộp, bạn sẽ không thể chỉnh sửa điểm tự chấm cho đến khi có yêu cầu giải trình.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-testid="button-cancel-submit">Hủy</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={handleSubmitEvaluation}
+                disabled={submitEvaluationMutation.isPending}
+                data-testid="button-confirm-submit"
+              >
+                {submitEvaluationMutation.isPending ? 'Đang nộp...' : 'Xác nhận nộp'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {selectedCriteria && (
+          <>
+            <ScoringModal
+              open={scoringModalOpen}
+              onClose={() => setScoringModalOpen(false)}
+              criteriaName={selectedCriteria.name}
+              maxScore={selectedCriteria.maxScore}
+              currentScore={selectedCriteria.selfScore}
+              currentFile={selectedCriteria.selfScoreFile}
+              onSave={handleSaveScore}
+            />
+            <ReviewModal
+              open={reviewModalOpen}
+              onClose={() => setReviewModalOpen(false)}
+              criteriaName={selectedCriteria.name}
+              maxScore={selectedCriteria.maxScore}
+              selfScore={selectedCriteria.selfScore}
+              currentReviewScore={reviewType === "review1" ? selectedCriteria.review1Score : selectedCriteria.review2Score}
+              currentComment={reviewType === "review1" ? selectedCriteria.review1Comment : selectedCriteria.review2Comment}
+              currentFile={reviewType === "review1" ? selectedCriteria.review1File : selectedCriteria.review2File}
+              reviewType={reviewType}
+              onSave={handleSaveReview}
+            />
+          </>
+        )}
         </>
       )}
     </div>

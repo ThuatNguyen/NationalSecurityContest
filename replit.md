@@ -15,6 +15,24 @@ This is a web application for scoring competitive evaluations in the Vietnamese 
 
 ## Recent Changes
 
+**November 2025 - Evaluation Periods Filter UI Simplification**
+- **Filter Streamlining:** Reduced filter fields from 4 to 3 by removing redundant "Kỳ thi đua" (Period) field
+  - **Business Rule:** Each year has exactly one evaluation period, making period selector redundant
+  - **New Filter Structure:** Year + Cluster + Unit (3 fields only)
+  - **Backend Logic:** Unchanged - period auto-selected from filteredPeriods[0] based on selected year
+- **Role-Based Filter Permissions:**
+  - **Admin:** All 3 fields are dropdowns (full flexibility)
+  - **Cluster Leader:** Year dropdown + Cluster read-only (locked to their cluster) + Unit dropdown (units in their cluster)
+  - **User:** Year dropdown + Cluster read-only (auto-detected from unit) + Unit read-only (locked to their unit)
+- **Implementation Details:**
+  - useEffect sets selectedClusterId and selectedUnitId on mount based on user role
+  - Admin: defaults to first cluster + first unit in that cluster
+  - Cluster leader: locks to user.clusterId + defaults to first unit in cluster
+  - User: auto-detects cluster from user.unitId + locks to user.unitId
+  - Query summary endpoint uses selectedUnitId instead of hardcoded user.unitId
+- **E2E Testing:** Verified with Playwright across all roles (admin, user roles tested)
+- **Architect Notes:** Filter works correctly assuming one-period-per-year constraint; consider displaying period name in table header for transparency
+
 **November 2025 - Null Handling Bug Fixes in Scoring Displays**
 - **Critical Bug Fix:** Fixed runtime crashes caused by NULL score values calling toFixed()
   - **Root Cause:** `!== undefined` check doesn't guard against NULL in JavaScript (NULL !== undefined → true)

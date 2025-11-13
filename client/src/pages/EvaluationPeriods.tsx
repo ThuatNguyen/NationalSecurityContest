@@ -293,9 +293,123 @@ export default function EvaluationPeriods() {
     });
   };
 
+  // Mutation for saving review scores
+  const saveReviewMutation = useMutation({
+    mutationFn: async ({ score, comment, file, criteriaId, reviewType, existingFileUrl }: { 
+      score: number; 
+      comment: string; 
+      file: File | null; 
+      criteriaId: string; 
+      reviewType: "review1" | "review2";
+      existingFileUrl?: string | null;
+    }) => {
+      let fileUrl: string | undefined = existingFileUrl || undefined; // Preserve existing file
+
+      // Upload file if provided (overwrites existing)
+      if (file) {
+        console.log('[REVIEW SAVE] Uploading file:', file.name, 'size:', file.size);
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const uploadRes = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+          credentials: 'include',
+        });
+
+        if (!uploadRes.ok) {
+          console.error('[REVIEW SAVE] Upload failed:', uploadRes.status, uploadRes.statusText);
+          throw new Error('Upload file thất bại');
+        }
+
+        const uploadData = await uploadRes.json();
+        fileUrl = uploadData.fileUrl;
+        console.log('[REVIEW SAVE] Upload successful, fileUrl:', fileUrl);
+      } else {
+        console.log('[REVIEW SAVE] No new file, preserving existing:', fileUrl);
+      }
+
+      // Capture current periodId and unitId for invalidation
+      const currentPeriodId = selectedPeriod?.id;
+      const currentUnitId = selectedUnitId;
+
+      // Ensure evaluation exists (create if needed)
+      let evaluationId = summary?.evaluation?.id;
+      if (!evaluationId) {
+        console.log('[REVIEW SAVE] No evaluation found, creating one via ensure endpoint');
+        const ensureRes = await apiRequest('POST', '/api/evaluations/ensure', {
+          periodId: currentPeriodId,
+          unitId: currentUnitId,
+        });
+        const ensureData = await ensureRes.json();
+        evaluationId = ensureData.id;
+        console.log('[REVIEW SAVE] Evaluation ensured, id:', evaluationId);
+      }
+
+      // Build score data based on review type
+      const scoreData: any = {
+        criteriaId,
+      };
+      
+      if (reviewType === "review1") {
+        scoreData.review1Score = score;
+        scoreData.review1Comment = comment;
+        if (fileUrl) {
+          scoreData.review1File = fileUrl;
+        }
+      } else {
+        scoreData.review2Score = score;
+        scoreData.review2Comment = comment;
+        if (fileUrl) {
+          scoreData.review2File = fileUrl;
+        }
+      }
+
+      console.log('[REVIEW SAVE] Sending scores update:', [scoreData]);
+      const res = await apiRequest('PUT', `/api/evaluations/${evaluationId}/scores`, { scores: [scoreData] });
+      const result = await res.json();
+      console.log('[REVIEW SAVE] Update successful, result:', result);
+      
+      // Return captured IDs for invalidation
+      return { result, periodId: currentPeriodId, unitId: currentUnitId };
+    },
+    onSuccess: (data) => {
+      console.log('[REVIEW SAVE] onSuccess called, invalidating cache for:', data.periodId, data.unitId);
+      // Invalidate using captured IDs to ensure correct query is invalidated
+      queryClient.invalidateQueries({ 
+        queryKey: ['/api/evaluation-periods', data.periodId, 'units', data.unitId, 'summary'] 
+      });
+      toast({
+        title: "Thành công",
+        description: "Đã lưu điểm thẩm định thành công",
+      });
+      setReviewModalOpen(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Lỗi",
+        description: error.message || "Không thể lưu điểm thẩm định",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleSaveReview = (score: number, comment: string, file: File | null) => {
-    // TODO: Implement save review API
-    console.log('Save review:', score, comment, file);
+    if (!selectedCriteria) return;
+    
+    // Determine existing file URL based on review type
+    const existingFileUrl = reviewType === "review1" 
+      ? selectedCriteria.review1File 
+      : selectedCriteria.review2File;
+    
+    saveReviewMutation.mutate({
+      score,
+      comment,
+      file,
+      criteriaId: selectedCriteria.id,
+      reviewType,
+      existingFileUrl,
+    });
   };
 
   // Calculate group totals

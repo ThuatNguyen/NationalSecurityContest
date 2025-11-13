@@ -181,9 +181,11 @@ export default function EvaluationPeriods() {
     return periods.filter(p => {
       if (p.year !== selectedYear) return false;
       if (user?.role === 'cluster_leader' && p.clusterId !== user.clusterId) return false;
+      // Admin: filter by selected cluster
+      if (user?.role === 'admin' && selectedClusterId && p.clusterId !== selectedClusterId) return false;
       return true;
     });
-  }, [periods, selectedYear, user]);
+  }, [periods, selectedYear, user, selectedClusterId]);
 
   const selectedPeriod = filteredPeriods[0]; // Auto-select first period
 
@@ -653,7 +655,12 @@ export default function EvaluationPeriods() {
         </div>
       ) : !selectedPeriod ? (
         <div className="border rounded-md p-8 text-center">
-          <p className="text-muted-foreground">Không có kỳ thi đua nào cho năm {selectedYear}</p>
+          <p className="text-muted-foreground">
+            {selectedClusterId 
+              ? `Không có kỳ thi đua nào cho cụm này và năm ${selectedYear}. Vui lòng chọn cụm khác hoặc năm khác.`
+              : `Không có kỳ thi đua nào cho năm ${selectedYear}`
+            }
+          </p>
         </div>
       ) : !summary ? (
         <div className="border rounded-md p-8 text-center">

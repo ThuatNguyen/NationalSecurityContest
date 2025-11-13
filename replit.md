@@ -3,6 +3,17 @@
 ## Overview
 This web application digitizes and streamlines the evaluation process for the Vietnamese People's Public Security force's "Vì An ninh Tổ quốc" emulation program. It manages self-scoring, cluster-level review, and final approval workflows across different organizational units. The system aims to ensure transparency, accuracy, and ease of data aggregation for competitive evaluations.
 
+## Recent Changes
+
+### 2025-01-13: Fixed Cluster-Period Mismatch Issue
+- **Problem**: Admin selecting "Khối hậu cần" cluster saw criteria from different clusters because evaluation periods weren't filtered by selected cluster
+- **Root Cause**: `filteredPeriods` only filtered by year and user role, not by admin's selected cluster
+- **Solution**: 
+  - Added cluster-based filtering for admin role in `filteredPeriods` memoization
+  - Improved empty state message to guide users when no periods exist for selected cluster/year
+  - Ensures criteria displayed always match the selected cluster filter
+- **Impact**: Admin and cluster leaders now see criteria consistent with their cluster selection
+
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 

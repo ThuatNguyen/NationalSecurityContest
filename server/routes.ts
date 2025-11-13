@@ -155,18 +155,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/uploads', requireAuth, (req, res, next) => {
     const uploadsDir = path.join(process.cwd(), 'uploads');
     
-    // Remove leading slash from req.path to prevent absolute path issues
-    const relativePath = req.path.startsWith('/') ? req.path.slice(1) : req.path;
+    // Decode URL-encoded path (handles spaces and special characters)
+    const decodedPath = decodeURIComponent(req.path);
+    
+    // Remove leading slash from decoded path to prevent absolute path issues
+    const relativePath = decodedPath.startsWith('/') ? decodedPath.slice(1) : decodedPath;
     const requestedPath = path.join(uploadsDir, relativePath);
     const normalizedPath = path.normalize(requestedPath);
-    
-    console.log('[FILE ACCESS DEBUG]', {
-      originalPath: req.path,
-      relativePath,
-      requestedPath,
-      normalizedPath,
-      exists: fs.existsSync(normalizedPath)
-    });
     
     // Security: Ensure requested path is within uploads directory (with path separator check)
     if (!normalizedPath.startsWith(uploadsDir + path.sep) && normalizedPath !== uploadsDir) {
@@ -174,7 +169,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     if (!fs.existsSync(normalizedPath)) {
-      console.log('[FILE NOT FOUND]', normalizedPath);
       return res.status(404).json({ message: "File không tồn tại" });
     }
     

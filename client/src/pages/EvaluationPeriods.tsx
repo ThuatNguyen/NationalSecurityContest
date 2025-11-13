@@ -3,12 +3,14 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { FileText, RefreshCw } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useSession } from "@/lib/useSession";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import ScoringModal from "@/components/ScoringModal";
 import ReviewModal from "@/components/ReviewModal";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface Criteria {
   id: string;
@@ -55,6 +57,7 @@ interface EvaluationSummary {
 
 export default function EvaluationPeriods() {
   const { user } = useSession();
+  const { toast } = useToast();
   const [scoringModalOpen, setScoringModalOpen] = useState(false);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [selectedCriteria, setSelectedCriteria] = useState<Criteria | null>(null);
@@ -194,9 +197,66 @@ export default function EvaluationPeriods() {
     setReviewModalOpen(true);
   };
 
+  // Mutation for saving scores
+  const saveScoreMutation = useMutation({
+    mutationFn: async ({ score, file, criteriaId }: { score: number; file: File | null; criteriaId: string }) => {
+      let fileUrl: string | undefined = undefined;
+
+      // Upload file if provided
+      if (file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const uploadRes = await apiRequest('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+        
+        fileUrl = uploadRes.fileUrl;
+      }
+
+      // Update scores via bulk update API
+      if (!summary?.evaluation?.id) {
+        throw new Error('Không tìm thấy đánh giá');
+      }
+
+      const scoresData = [{
+        criteriaId,
+        selfScore: score,
+        selfScoreFile: fileUrl,
+      }];
+
+      return apiRequest(`/api/evaluations/${summary.evaluation.id}/scores`, {
+        method: 'PUT',
+        body: JSON.stringify({ scores: scoresData }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+    },
+    onSuccess: () => {
+      // Invalidate and refetch
+      queryClient.invalidateQueries({ queryKey: ['/api/evaluation-periods', selectedPeriod?.id, 'units', selectedUnitId, 'summary'] });
+      toast({
+        title: "Thành công",
+        description: "Đã lưu điểm thành công",
+      });
+      setScoringModalOpen(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Lỗi",
+        description: error.message || "Không thể lưu điểm",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleSaveScore = (score: number, file: File | null) => {
-    // TODO: Implement save score API
-    console.log('Save score:', score, file);
+    if (!selectedCriteria) return;
+    saveScoreMutation.mutate({
+      score,
+      file,
+      criteriaId: selectedCriteria.id,
+    });
   };
 
   const handleSaveReview = (score: number, comment: string, file: File | null) => {

@@ -226,14 +226,22 @@ export default function EvaluationPeriods() {
         console.log('[SCORE SAVE] No new file, preserving existing:', fileUrl);
       }
 
-      // Update scores via bulk update API
-      if (!summary?.evaluation?.id) {
-        throw new Error('Không tìm thấy đánh giá');
-      }
-
       // Capture current periodId and unitId for invalidation
       const currentPeriodId = selectedPeriod?.id;
       const currentUnitId = selectedUnitId;
+
+      // Ensure evaluation exists (create if needed)
+      let evaluationId = summary?.evaluation?.id;
+      if (!evaluationId) {
+        console.log('[SCORE SAVE] No evaluation found, creating one via ensure endpoint');
+        const ensureRes = await apiRequest('POST', '/api/evaluations/ensure', {
+          periodId: currentPeriodId,
+          unitId: currentUnitId,
+        });
+        const ensureData = await ensureRes.json();
+        evaluationId = ensureData.id;
+        console.log('[SCORE SAVE] Evaluation ensured, id:', evaluationId);
+      }
 
       // Build score data, omitting undefined file URLs (don't overwrite with null)
       const scoreData: any = {
@@ -247,7 +255,7 @@ export default function EvaluationPeriods() {
       }
 
       console.log('[SCORE SAVE] Sending scores update:', [scoreData]);
-      const res = await apiRequest('PUT', `/api/evaluations/${summary.evaluation.id}/scores`, { scores: [scoreData] });
+      const res = await apiRequest('PUT', `/api/evaluations/${evaluationId}/scores`, { scores: [scoreData] });
       const result = await res.json();
       console.log('[SCORE SAVE] Update successful, result:', result);
       

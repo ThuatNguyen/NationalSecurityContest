@@ -1079,7 +1079,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           periodId,
           unitId,
           status: "draft",
-          createdBy: req.user!.id,
         });
       }
 

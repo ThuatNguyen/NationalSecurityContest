@@ -828,6 +828,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Aggregated endpoint for evaluation summary (period + evaluation + scores + criteria)
+  app.get("/api/evaluation-periods/:periodId/units/:unitId/summary", requireAuth, async (req, res, next) => {
+    try {
+      const { periodId, unitId } = req.params;
+      
+      // Verify unit exists and check access permissions
+      const unit = await storage.getUnit(unitId);
+      if (!unit) {
+        return res.status(404).json({ message: "Không tìm thấy đơn vị" });
+      }
+      
+      // Role-based access control
+      if (req.user!.role !== "admin") {
+        if (req.user!.role === "cluster_leader" && unit.clusterId !== req.user!.clusterId) {
+          return res.status(403).json({ message: "Bạn chỉ có thể xem dữ liệu của cụm mình" });
+        }
+        
+        if (req.user!.role === "user" && unitId !== req.user!.unitId) {
+          return res.status(403).json({ message: "Bạn chỉ có thể xem dữ liệu của đơn vị mình" });
+        }
+      }
+      
+      const summary = await storage.getEvaluationSummary(periodId, unitId);
+      if (!summary) {
+        return res.status(404).json({ message: "Không tìm thấy kỳ thi đua" });
+      }
+      
+      res.json(summary);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   // Evaluation routes
   app.get("/api/evaluations", requireAuth, async (req, res, next) => {
     try {

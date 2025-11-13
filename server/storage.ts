@@ -1,6 +1,6 @@
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql as sqlExpr } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import type { 
   User, InsertUser,
@@ -71,6 +71,32 @@ export interface IStorage {
   getScore(id: string): Promise<Score | undefined>;
   createScore(score: InsertScore): Promise<Score>;
   updateScore(id: string, score: Partial<InsertScore>): Promise<Score | undefined>;
+  
+  // Evaluation Summary (aggregated data for evaluation periods page)
+  getEvaluationSummary(periodId: string, unitId: string): Promise<{
+    period: EvaluationPeriod;
+    evaluation: Evaluation | null;
+    criteriaGroups: Array<{
+      id: string;
+      name: string;
+      displayOrder: number;
+      criteria: Array<{
+        id: string;
+        name: string;
+        maxScore: string;
+        displayOrder: number;
+        selfScore?: string | null;
+        selfScoreFile?: string | null;
+        review1Score?: string | null;
+        review1Comment?: string | null;
+        review1File?: string | null;
+        review2Score?: string | null;
+        review2Comment?: string | null;
+        review2File?: string | null;
+        finalScore?: string | null;
+      }>;
+    }>;
+  } | null>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -282,6 +308,118 @@ export class DatabaseStorage implements IStorage {
   async updateScore(id: string, score: Partial<InsertScore>): Promise<Score | undefined> {
     const result = await db.update(schema.scores).set(score).where(eq(schema.scores.id, id)).returning();
     return result[0];
+  }
+
+  async getEvaluationSummary(periodId: string, unitId: string) {
+    // 1. Fetch period (fail fast if missing)
+    const period = await this.getEvaluationPeriod(periodId);
+    if (!period) {
+      return null;
+    }
+
+    // 2. Fetch evaluation for this period and unit (may be null)
+    const evaluations = await this.getEvaluations(periodId, unitId);
+    const evaluation = evaluations.length > 0 ? evaluations[0] : null;
+
+    // 3. Single query: JOIN criteria_groups, criteria, and scores
+    // This eliminates N+1 queries and ensures proper ordering
+    // When no evaluation exists, scores will be null (no data leak)
+    const rows = await db
+      .select({
+        groupId: schema.criteriaGroups.id,
+        groupName: schema.criteriaGroups.name,
+        groupDisplayOrder: schema.criteriaGroups.displayOrder,
+        criteriaId: schema.criteria.id,
+        criteriaName: schema.criteria.name,
+        criteriaMaxScore: schema.criteria.maxScore,
+        criteriaDisplayOrder: schema.criteria.displayOrder,
+        selfScore: schema.scores.selfScore,
+        selfScoreFile: schema.scores.selfScoreFile,
+        review1Score: schema.scores.review1Score,
+        review1Comment: schema.scores.review1Comment,
+        review1File: schema.scores.review1File,
+        review2Score: schema.scores.review2Score,
+        review2Comment: schema.scores.review2Comment,
+        review2File: schema.scores.review2File,
+        finalScore: schema.scores.finalScore,
+      })
+      .from(schema.criteriaGroups)
+      .innerJoin(schema.criteria, eq(schema.criteria.groupId, schema.criteriaGroups.id))
+      .leftJoin(
+        schema.scores,
+        evaluation
+          ? and(
+              eq(schema.scores.criteriaId, schema.criteria.id),
+              eq(schema.scores.evaluationId, evaluation.id)
+            )
+          : sqlExpr`false` // No evaluation = no scores (prevents data leak)
+      )
+      .where(
+        and(
+          eq(schema.criteriaGroups.clusterId, period.clusterId),
+          eq(schema.criteriaGroups.year, period.year)
+        )
+      )
+      .orderBy(schema.criteriaGroups.displayOrder, schema.criteria.displayOrder);
+
+    // 4. Regroup rows by criteria group
+    const groupMap = new Map<string, {
+      id: string;
+      name: string;
+      displayOrder: number;
+      criteria: Array<{
+        id: string;
+        name: string;
+        maxScore: string;
+        displayOrder: number;
+        selfScore?: string | null;
+        selfScoreFile?: string | null;
+        review1Score?: string | null;
+        review1Comment?: string | null;
+        review1File?: string | null;
+        review2Score?: string | null;
+        review2Comment?: string | null;
+        review2File?: string | null;
+        finalScore?: string | null;
+      }>;
+    }>();
+
+    for (const row of rows) {
+      let group = groupMap.get(row.groupId);
+      if (!group) {
+        group = {
+          id: row.groupId,
+          name: row.groupName,
+          displayOrder: row.groupDisplayOrder,
+          criteria: [],
+        };
+        groupMap.set(row.groupId, group);
+      }
+
+      group.criteria.push({
+        id: row.criteriaId,
+        name: row.criteriaName,
+        maxScore: row.criteriaMaxScore,
+        displayOrder: row.criteriaDisplayOrder,
+        selfScore: row.selfScore,
+        selfScoreFile: row.selfScoreFile,
+        review1Score: row.review1Score,
+        review1Comment: row.review1Comment,
+        review1File: row.review1File,
+        review2Score: row.review2Score,
+        review2Comment: row.review2Comment,
+        review2File: row.review2File,
+        finalScore: row.finalScore,
+      });
+    }
+
+    const criteriaGroups = Array.from(groupMap.values());
+
+    return {
+      period,
+      evaluation,
+      criteriaGroups,
+    };
   }
 }
 

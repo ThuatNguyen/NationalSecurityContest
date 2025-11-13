@@ -127,11 +127,22 @@ const upload = multer({
     fileSize: 10 * 1024 * 1024 // 10MB
   },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = /pdf|doc|docx|xls|xlsx|jpg|jpeg|png|txt/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
+    const allowedExtensions = /\.(pdf|doc|docx|xls|xlsx|jpg|jpeg|png|txt)$/i;
+    const allowedMimeTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'image/jpeg',
+      'image/png',
+      'text/plain'
+    ];
     
-    if (extname && mimetype) {
+    const hasValidExtension = allowedExtensions.test(file.originalname.toLowerCase());
+    const hasValidMimeType = allowedMimeTypes.includes(file.mimetype);
+    
+    if (hasValidExtension && hasValidMimeType) {
       cb(null, true);
     } else {
       cb(new Error('Chỉ chấp nhận file PDF, DOC, DOCX, XLS, XLSX, JPG, PNG, TXT'));

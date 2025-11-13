@@ -182,9 +182,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return sanitized;
   }
 
-  app.get("/api/users", requireRole("admin"), async (req, res, next) => {
+  app.get("/api/users", requireRole("admin", "cluster_leader"), async (req, res, next) => {
     try {
-      const users = await storage.getUsers();
+      let users = await storage.getUsers();
+      const units = await storage.getUnits();
+      
+      // Filter users by cluster for cluster_leader
+      if (req.user!.role === "cluster_leader" && req.user!.clusterId) {
+        // Cluster leaders can only see users in their cluster
+        users = users.filter(u => 
+          u.clusterId === req.user!.clusterId || 
+          (u.unitId && units.some(unit => unit.id === u.unitId && unit.clusterId === req.user!.clusterId))
+        );
+      }
+      
+      // Support explicit clusterId filter from query params
+      const clusterIdFilter = req.query.clusterId as string | undefined;
+      if (clusterIdFilter) {
+        users = users.filter(u => 
+          u.clusterId === clusterIdFilter ||
+          (u.unitId && units.some(unit => unit.id === u.unitId && unit.clusterId === clusterIdFilter))
+        );
+      }
+      
       const sanitized = users.map(sanitizeUser);
       res.json(sanitized);
     } catch (error) {

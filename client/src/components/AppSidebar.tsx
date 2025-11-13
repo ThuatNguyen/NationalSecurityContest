@@ -118,7 +118,7 @@ export const SETTINGS_NAV_ITEMS: NavItem[] = [
     url: "/settings/users", 
     icon: Users, 
     testId: "nav-users",
-    allowedRoles: ["admin"]
+    allowedRoles: ["admin", "cluster_leader"]
   },
 ];
 

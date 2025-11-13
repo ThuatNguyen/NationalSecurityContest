@@ -1,6 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useSession } from "@/lib/useSession";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,9 +38,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Pencil, Trash2, Search } from "lucide-react";
-import { useState } from "react";
+import { Plus, Pencil, Trash2, Search, Info } from "lucide-react";
+import { useState, useEffect } from "react";
 import RoleBadge from "@/components/RoleBadge";
 
 interface User {
@@ -64,6 +66,7 @@ interface Unit {
 }
 
 export default function UsersManagement() {
+  const { user: currentUser } = useSession();
   const [searchTerm, setSearchTerm] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -79,8 +82,23 @@ export default function UsersManagement() {
   });
   const { toast } = useToast();
 
+  // Auto-set cluster for cluster_leader when creating new user
+  useEffect(() => {
+    if (currentUser?.role === "cluster_leader" && currentUser.clusterId && !selectedUser) {
+      setFormData(prev => ({ ...prev, clusterId: currentUser.clusterId || "" }));
+    }
+  }, [currentUser, selectedUser]);
+
   const { data: users = [], isLoading: usersLoading } = useQuery<User[]>({
-    queryKey: ['/api/users'],
+    queryKey: ['/api/users', currentUser?.clusterId],
+    queryFn: async () => {
+      const url = currentUser?.role === "cluster_leader" && currentUser.clusterId
+        ? `/api/users?clusterId=${currentUser.clusterId}`
+        : '/api/users';
+      const response = await fetch(url, { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch users');
+      return response.json();
+    },
   });
 
   const { data: clusters = [] } = useQuery<Cluster[]>({
@@ -281,6 +299,15 @@ export default function UsersManagement() {
 
   return (
     <div className="space-y-6">
+      {currentUser?.role === "cluster_leader" && currentUser.clusterId && (
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            Bạn đang quản lý người dùng trong cụm: <strong>{clusters.find(c => c.id === currentUser.clusterId)?.name}</strong>
+          </AlertDescription>
+        </Alert>
+      )}
+      
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between gap-4">
@@ -467,12 +494,15 @@ export default function UsersManagement() {
             </div>
             {formData.role === "cluster_leader" && (
               <div className="space-y-2">
-                <Label htmlFor="cluster">Cụm *</Label>
+                <Label htmlFor="cluster">
+                  Cụm * {currentUser?.role === "cluster_leader" && "(Tự động chọn cụm của bạn)"}
+                </Label>
                 <Select
                   value={formData.clusterId}
                   onValueChange={(value) =>
                     setFormData({ ...formData, clusterId: value })
                   }
+                  disabled={currentUser?.role === "cluster_leader"}
                 >
                   <SelectTrigger data-testid="select-cluster">
                     <SelectValue placeholder="Chọn cụm..." />

@@ -15,22 +15,28 @@ This is a web application for scoring competitive evaluations in the Vietnamese 
 
 ## Recent Changes
 
-**November 2025 - Cluster Leader User Management Access**
-- **Extended Permissions:** Cluster leaders can now access Users Management to manage users within their cluster
-  - Navigation: "Quản lý người dùng" menu item visible to both admin and cluster_leader roles
-  - Route protection: /settings/users allows admin + cluster_leader access
+**November 2025 - Cluster Leader User Creation with Restrictions**
+- **Extended Permissions:** Cluster leaders can now create users within their cluster
+  - Backend: POST /api/auth/register now accepts cluster_leader role
+  - Cluster leaders can ONLY create users with role="user" (not admin or cluster_leader)
+  - All created users must belong to a unit within the cluster leader's cluster
+- **Frontend Restrictions:**
+  - Role dropdown: Cluster leaders creating users see only "Người dùng" option (disabled)
+  - Cluster display: Auto-filled, shown as read-only text (not editable selector)
+  - Unit dropdown: Filtered to show only units within their cluster
+- **Backend Validation:**
+  - Forces role="user" for cluster_leader-created users
+  - Forces clusterId to cluster_leader's cluster (prevents cross-cluster assignment)
+  - Validates unitId exists and belongs to their cluster before creation
+  - Rejects requests with missing unitId or units from other clusters
 - **Auto-Scoped User Filtering:** 
-  - Cluster leaders see only users in their cluster (automatic filtering)
+  - Cluster leaders see only users in their cluster (GET /api/users filtered)
   - Context alert displays: "Bạn đang quản lý người dùng trong cụm: [cluster name]"
-  - Users table filtered by cluster on both frontend and backend
-- **Form Auto-Population:**
-  - When cluster leader creates new user, cluster selector auto-fills with their cluster
-  - Cluster selector is disabled to prevent cross-cluster assignment
-  - Works correctly for creating cluster_leader and user roles
-- **Backend Security:**
-  - GET /api/users filters by req.user.clusterId for cluster_leader role
-  - Admin access unchanged (sees all users)
-- **E2E Tested:** All workflows verified with Playwright
+- **Security:**
+  - All validation enforced on both frontend and backend
+  - No bypass paths - cluster leaders cannot escalate privileges or cross clusters
+  - Admin workflow unchanged (full flexibility retained)
+- **E2E Tested:** All workflows verified with Playwright including edge cases
 
 **November 2025 - Unified Menu with Role-Based Access Control**
 - **Architecture:** Refactored navigation to single NAV_ITEMS configuration with role-based metadata

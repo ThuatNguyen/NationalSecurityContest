@@ -1041,6 +1041,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Ensure evaluation exists (create if not) - for scoring workflow
+  app.post("/api/evaluations/ensure", requireAuth, async (req, res, next) => {
+    try {
+      const { periodId, unitId } = z.object({
+        periodId: z.string(),
+        unitId: z.string(),
+      }).parse(req.body);
+
+      // Verify period exists
+      const period = await storage.getEvaluationPeriod(periodId);
+      if (!period) {
+        return res.status(404).json({ message: "Không tìm thấy kỳ thi đua" });
+      }
+
+      // Verify unit exists
+      const unit = await storage.getUnit(unitId);
+      if (!unit) {
+        return res.status(404).json({ message: "Không tìm thấy đơn vị" });
+      }
+
+      // Check permissions
+      if (req.user!.role === "user" && unitId !== req.user!.unitId) {
+        return res.status(403).json({ message: "Bạn chỉ có thể tạo đánh giá cho đơn vị của mình" });
+      }
+
+      if (req.user!.role === "cluster_leader" && unit.clusterId !== req.user!.clusterId) {
+        return res.status(403).json({ message: "Bạn chỉ có thể tạo đánh giá cho đơn vị trong cụm của mình" });
+      }
+
+      // Check if evaluation already exists
+      let evaluation = await storage.getEvaluationByPeriodUnit(periodId, unitId);
+      
+      // Create if doesn't exist
+      if (!evaluation) {
+        evaluation = await storage.createEvaluation({
+          periodId,
+          unitId,
+          status: "draft",
+          createdBy: req.user!.id,
+        });
+      }
+
+      res.json(evaluation);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Dữ liệu không hợp lệ", errors: error.errors });
+      }
+      next(error);
+    }
+  });
+
   app.put("/api/evaluations/:id", requireAuth, async (req, res, next) => {
     try {
       const evaluationData = insertEvaluationSchema.partial().parse(req.body);

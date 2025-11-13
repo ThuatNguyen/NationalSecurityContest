@@ -13,6 +13,16 @@ This is a web application for scoring competitive evaluations in the Vietnamese 
 - Annual evaluation periods
 - Comprehensive reporting and analytics
 
+## Recent Changes
+
+**November 2025 - Criteria Management Implementation**
+- Implemented comprehensive criteria management system with dual-level hierarchy
+- Added CRUD operations for criteria groups and individual criteria
+- Implemented role-based UI permissions (admin/cluster_leader can manage, users read-only)
+- Fixed critical bugs: query cache invalidation, empty groups rendering, groupId validation
+- All Vietnamese interface with Material Design 3 styling
+- E2E tested with Playwright: all core workflows verified
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.

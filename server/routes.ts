@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import mime from "mime-types";
 import { storage } from "./storage";
 import { 
   insertUserSchema, 
@@ -157,6 +158,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(404).json({ message: "File không tồn tại" });
     }
     
+    // Set correct Content-Type for PDFs and other files
+    const mimeType = mime.lookup(normalizedPath);
+    if (mimeType) {
+      res.type(mimeType);
+    }
     res.setHeader('Content-Disposition', 'inline');
     res.sendFile(normalizedPath);
   });
@@ -168,12 +174,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Không có file được tải lên" });
       }
       
+      console.log(`[FILE UPLOAD] File received: ${req.file.originalname}, Size: ${req.file.size} bytes, MIME: ${req.file.mimetype}`);
+      
       const fileUrl = `/uploads/scores/${req.file.filename}`;
       res.json({ 
         message: "Upload thành công",
         filename: req.file.filename,
         fileUrl: fileUrl,
-        originalName: req.file.originalname
+        originalName: req.file.originalname,
+        size: req.file.size
       });
     } catch (error) {
       next(error);
@@ -1516,7 +1525,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             updateData.selfScore = scoreData.selfScore.toString();
             updateData.selfScoreDate = new Date();
           }
-          if (scoreData.selfScoreFile !== undefined) {
+          // Only update file URL if explicitly provided (not undefined/null)
+          if (scoreData.selfScoreFile !== undefined && scoreData.selfScoreFile !== null) {
             updateData.selfScoreFile = scoreData.selfScoreFile;
           }
           
@@ -1527,7 +1537,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (scoreData.review1Comment !== undefined) {
             updateData.review1Comment = scoreData.review1Comment;
           }
-          if (scoreData.review1File !== undefined) {
+          // Only update file URL if explicitly provided (not undefined/null)
+          if (scoreData.review1File !== undefined && scoreData.review1File !== null) {
             updateData.review1File = scoreData.review1File;
           }
           
@@ -1543,7 +1554,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (scoreData.review2Comment !== undefined) {
             updateData.review2Comment = scoreData.review2Comment;
           }
-          if (scoreData.review2File !== undefined) {
+          // Only update file URL if explicitly provided (not undefined/null)
+          if (scoreData.review2File !== undefined && scoreData.review2File !== null) {
             updateData.review2File = scoreData.review2File;
           }
           

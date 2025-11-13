@@ -2,7 +2,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { FileText, RefreshCw } from "lucide-react";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, Fragment } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useSession } from "@/lib/useSession";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -199,11 +199,12 @@ export default function EvaluationPeriods() {
 
   // Mutation for saving scores
   const saveScoreMutation = useMutation({
-    mutationFn: async ({ score, file, criteriaId }: { score: number; file: File | null; criteriaId: string }) => {
-      let fileUrl: string | undefined = undefined;
+    mutationFn: async ({ score, file, criteriaId, existingFileUrl }: { score: number; file: File | null; criteriaId: string; existingFileUrl?: string | null }) => {
+      let fileUrl: string | undefined = existingFileUrl || undefined; // Preserve existing file
 
-      // Upload file if provided
+      // Upload file if provided (overwrites existing)
       if (file) {
+        console.log('[SCORE SAVE] Uploading file:', file.name, 'size:', file.size);
         const formData = new FormData();
         formData.append('file', file);
         
@@ -214,11 +215,15 @@ export default function EvaluationPeriods() {
         });
 
         if (!uploadRes.ok) {
+          console.error('[SCORE SAVE] Upload failed:', uploadRes.status, uploadRes.statusText);
           throw new Error('Upload file thất bại');
         }
 
         const uploadData = await uploadRes.json();
         fileUrl = uploadData.fileUrl;
+        console.log('[SCORE SAVE] Upload successful, fileUrl:', fileUrl);
+      } else {
+        console.log('[SCORE SAVE] No new file, preserving existing:', fileUrl);
       }
 
       // Update scores via bulk update API
@@ -226,18 +231,35 @@ export default function EvaluationPeriods() {
         throw new Error('Không tìm thấy đánh giá');
       }
 
-      const scoresData = [{
+      // Capture current periodId and unitId for invalidation
+      const currentPeriodId = selectedPeriod?.id;
+      const currentUnitId = selectedUnitId;
+
+      // Build score data, omitting undefined file URLs (don't overwrite with null)
+      const scoreData: any = {
         criteriaId,
         selfScore: score,
-        selfScoreFile: fileUrl,
-      }];
+      };
+      
+      // Only include selfScoreFile if we have a valid URL
+      if (fileUrl) {
+        scoreData.selfScoreFile = fileUrl;
+      }
 
-      const res = await apiRequest('PUT', `/api/evaluations/${summary.evaluation.id}/scores`, { scores: scoresData });
-      return await res.json();
+      console.log('[SCORE SAVE] Sending scores update:', [scoreData]);
+      const res = await apiRequest('PUT', `/api/evaluations/${summary.evaluation.id}/scores`, { scores: [scoreData] });
+      const result = await res.json();
+      console.log('[SCORE SAVE] Update successful, result:', result);
+      
+      // Return captured IDs for invalidation
+      return { result, periodId: currentPeriodId, unitId: currentUnitId };
     },
-    onSuccess: () => {
-      // Invalidate and refetch
-      queryClient.invalidateQueries({ queryKey: ['/api/evaluation-periods', selectedPeriod?.id, 'units', selectedUnitId, 'summary'] });
+    onSuccess: (data) => {
+      console.log('[SCORE SAVE] onSuccess called, invalidating cache for:', data.periodId, data.unitId);
+      // Invalidate using captured IDs to ensure correct query is invalidated
+      queryClient.invalidateQueries({ 
+        queryKey: ['/api/evaluation-periods', data.periodId, 'units', data.unitId, 'summary'] 
+      });
       toast({
         title: "Thành công",
         description: "Đã lưu điểm thành công",
@@ -259,6 +281,7 @@ export default function EvaluationPeriods() {
       score,
       file,
       criteriaId: selectedCriteria.id,
+      existingFileUrl: selectedCriteria.selfScoreFile, // Preserve existing file when no new upload
     });
   };
 
@@ -473,8 +496,8 @@ export default function EvaluationPeriods() {
                   };
 
                   return (
-                    <>
-                      <tr className="bg-accent/50" key={`group-${group.id}`}>
+                    <Fragment key={group.id}>
+                      <tr className="bg-accent/50">
                         <td colSpan={2} className="px-4 py-2 font-semibold text-sm">
                           {group.name}
                         </td>
@@ -504,43 +527,31 @@ export default function EvaluationPeriods() {
                             {item.maxScore}
                           </td>
                           <td className="px-4 py-3 text-center border-l">
-                            <div className="flex items-center justify-center gap-2">
-                              {user.role === "user" ? (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleOpenScoringModal(item)}
-                                  className="font-medium text-sm"
-                                  data-testid={`button-selfscore-${item.id}`}
-                                >
-                                  {typeof item.selfScore === 'number' ? item.selfScore.toFixed(2) : 'Chấm điểm'}
-                                </Button>
-                              ) : (
-                                <span className="font-medium text-sm" data-testid={`text-selfscore-${item.id}`}>
-                                  {typeof item.selfScore === 'number' ? item.selfScore.toFixed(2) : '-'}
-                                </span>
-                              )}
-                              {item.selfScoreFile && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => window.open(item.selfScoreFile, '_blank')}
-                                  className="h-8 w-8"
-                                  title="Xem file minh chứng"
-                                  data-testid={`button-view-file-${item.id}`}
-                                >
-                                  <FileText className="h-4 w-4 text-blue-600" />
-                                </Button>
-                              )}
-                            </div>
+                            {user.role === "user" ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleOpenScoringModal(item)}
+                                className="font-medium text-sm"
+                                data-testid={`button-selfscore-${item.id}`}
+                              >
+                                {item.selfScore != null && !isNaN(Number(item.selfScore)) ? Number(item.selfScore).toFixed(2) : 'Chấm điểm'}
+                              </Button>
+                            ) : (
+                              <span className="font-medium text-sm" data-testid={`text-selfscore-${item.id}`}>
+                                {item.selfScore != null && !isNaN(Number(item.selfScore)) ? Number(item.selfScore).toFixed(2) : '-'}
+                              </span>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-center">
                             {item.selfScoreFile ? (
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                onClick={() => window.open(item.selfScoreFile, '_blank')}
                                 className="h-8 w-8"
-                                data-testid={`button-view-file-${item.id}`}
+                                title="Xem file minh chứng"
+                                data-testid={`button-view-self-file-${item.id}`}
                               >
                                 <FileText className="w-4 h-4 text-primary" />
                               </Button>
@@ -557,11 +568,11 @@ export default function EvaluationPeriods() {
                                 className="font-medium text-sm"
                                 data-testid={`button-review1-${item.id}`}
                               >
-                                {typeof item.review1Score === 'number' ? item.review1Score.toFixed(2) : 'Thẩm định'}
+                                {item.review1Score != null && !isNaN(Number(item.review1Score)) ? Number(item.review1Score).toFixed(2) : 'Thẩm định'}
                               </Button>
                             ) : (
                               <span className="font-medium text-sm" data-testid={`text-review1-${item.id}`}>
-                                {typeof item.review1Score === 'number' ? item.review1Score.toFixed(2) : '-'}
+                                {item.review1Score != null && !isNaN(Number(item.review1Score)) ? Number(item.review1Score).toFixed(2) : '-'}
                               </span>
                             )}
                           </td>
@@ -579,22 +590,22 @@ export default function EvaluationPeriods() {
                                 className="font-medium text-sm"
                                 data-testid={`button-review2-${item.id}`}
                               >
-                                {typeof item.review2Score === 'number' ? item.review2Score.toFixed(2) : 'Thẩm định'}
+                                {item.review2Score != null && !isNaN(Number(item.review2Score)) ? Number(item.review2Score).toFixed(2) : 'Thẩm định'}
                               </Button>
                             ) : (
                               <span className="font-medium text-sm" data-testid={`text-review2-${item.id}`}>
-                                {typeof item.review2Score === 'number' ? item.review2Score.toFixed(2) : '-'}
+                                {item.review2Score != null && !isNaN(Number(item.review2Score)) ? Number(item.review2Score).toFixed(2) : '-'}
                               </span>
                             )}
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span className="font-bold text-sm text-primary" data-testid={`text-finalscore-${item.id}`}>
-                              {typeof item.finalScore === 'number' ? item.finalScore.toFixed(2) : '-'}
+                              {item.finalScore != null && !isNaN(Number(item.finalScore)) ? Number(item.finalScore).toFixed(2) : '-'}
                             </span>
                           </td>
                         </tr>
                       ))}
-                    </>
+                    </Fragment>
                   );
                 })}
                 <tr className="bg-muted font-bold">

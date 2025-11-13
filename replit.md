@@ -115,6 +115,30 @@ This is a web application for scoring competitive evaluations in the Vietnamese 
 - All Vietnamese interface with Material Design 3 styling
 - E2E tested with Playwright: all core workflows verified
 
+**November 2025 - File Upload System for Evidence Documentation**
+- **Complete Implementation:** Multi-file upload system for scoring evidence (PDF/DOC/DOCX/XLS/XLSX/images, max 10MB)
+  - Upload endpoint: POST /api/upload → returns {fileUrl, filename, size}
+  - File view: GET /uploads/:filename → serves with proper MIME type detection
+  - Security: Path traversal protection with normalization and boundary checks
+- **Critical Bug Fixes:**
+  - **File Persistence Fix:** Files now persist when editing scores without re-upload
+    - Frontend: Omits selfScoreFile property when no new file (prevents null serialization)
+    - Backend: Guards against undefined/null to prevent overwriting existing file paths
+  - **Content-Type Fix:** Changed from res.type() to mime.lookup() for proper PDF serving
+  - **Type Conversion:** Database returns scores as STRING - all displays convert to Number with null checks
+  - **Cache Invalidation:** Captures periodId/unitId at mutation time to prevent reactive state bugs
+- **UI/UX Improvements:**
+  - Removed inline file button from ĐIỂM column (score number only)
+  - Kept dedicated FILE column with unique testid: `button-view-self-file-${item.id}`
+  - Eliminated duplicate file buttons, cleaner Material Design table layout
+- **E2E Testing Results:**
+  - ✅ File upload: Valid PDF (1279 bytes) uploaded successfully
+  - ✅ File persistence: File button remains after editing score WITHOUT re-upload
+  - ✅ Content-Type: application/pdf served correctly
+  - ✅ UI structure: No duplicates, unique testids
+  - ✅ Persistence: Data survives page reload
+- **Production Ready:** Architect reviewed and approved all fixes
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.

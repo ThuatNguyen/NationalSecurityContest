@@ -15,6 +15,28 @@ This is a web application for scoring competitive evaluations in the Vietnamese 
 
 ## Recent Changes
 
+**November 2025 - Unified Menu with Role-Based Access Control**
+- **Architecture:** Refactored navigation to single NAV_ITEMS configuration with role-based metadata
+  - All roles see unified menu structure with appropriate items filtered by allowedRoles
+  - Settings section dynamically shows/hides items based on user role
+  - Unit users have Settings menu completely hidden
+- **Route Protection:** Created ProtectedRoute component for route-level authorization
+  - Checks user.role against allowedRoles before rendering page
+  - Returns 403 error view for unauthorized access attempts
+  - Applied to all /settings/* routes in App.tsx
+- **Auto-Scoped Data Filtering:** Implemented automatic cluster/unit filtering
+  - Cluster leaders: auto-select and lock to their cluster, cannot view other clusters
+  - Unit users: blocked from all Settings pages
+  - Context indicators (Alert badges) show active data scope: "Đang xem dữ liệu cụm: X"
+- **Backend Authorization:** All Settings endpoints protected with requireRole middleware
+  - /api/users: admin only
+  - /api/clusters: admin only (write), all roles (read)
+  - /api/units, /api/criteria: admin + cluster_leader (write), all roles (read)
+- **E2E Testing:** Verified with Playwright across all 3 roles
+  - Admin: full access, no filtering
+  - Cluster leader: scoped access with auto-filtering
+  - Unit user: Settings access completely blocked with 403
+
 **November 2025 - User Management Validation & UX Improvements**
 - Implemented comprehensive role-based validation for user creation/updates:
   - Admin: Cannot be assigned to cluster or unit (full system access)

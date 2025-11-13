@@ -3,6 +3,9 @@ import { createServer, type Server } from "http";
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import bcrypt from "bcryptjs";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 import { storage } from "./storage";
 import { 
   insertUserSchema, 
@@ -99,7 +102,78 @@ function requireRole(...roles: string[]) {
   };
 }
 
+// Configure multer for file uploads
+const uploadDir = path.join(process.cwd(), "uploads", "scores");
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const multerStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    const baseName = path.basename(file.originalname, ext);
+    cb(null, `${baseName}-${uniqueSuffix}${ext}`);
+  }
+});
+
+const upload = multer({
+  storage: multerStorage,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /pdf|doc|docx|xls|xlsx|jpg|jpeg|png|txt/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    
+    if (extname && mimetype) {
+      cb(null, true);
+    } else {
+      cb(new Error('Chỉ chấp nhận file PDF, DOC, DOCX, XLS, XLSX, JPG, PNG, TXT'));
+    }
+  }
+});
+
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Serve uploaded files
+  app.use('/uploads', requireAuth, (req, res, next) => {
+    // Additional auth check can be added here if needed
+    next();
+  }, (req, res, next) => {
+    res.setHeader('Content-Disposition', 'inline');
+    next();
+  }, (req, res, next) => {
+    const filePath = path.join(process.cwd(), 'uploads', req.url);
+    if (fs.existsSync(filePath)) {
+      res.sendFile(filePath);
+    } else {
+      res.status(404).json({ message: "File không tồn tại" });
+    }
+  });
+
+  // Upload file endpoint
+  app.post("/api/upload", requireAuth, upload.single('file'), async (req, res, next) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "Không có file được tải lên" });
+      }
+      
+      const fileUrl = `/uploads/scores/${req.file.filename}`;
+      res.json({ 
+        message: "Upload thành công",
+        filename: req.file.filename,
+        fileUrl: fileUrl,
+        originalName: req.file.originalname
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   // Authentication routes
   // Admins can create any user; cluster_leaders can only create users in their cluster
   app.post("/api/auth/register", requireRole("admin", "cluster_leader"), async (req, res, next) => {

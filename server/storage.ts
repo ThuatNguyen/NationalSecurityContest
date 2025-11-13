@@ -63,6 +63,7 @@ export interface IStorage {
   // Evaluations
   getEvaluations(periodId?: string, unitId?: string): Promise<Evaluation[]>;
   getEvaluation(id: string): Promise<Evaluation | undefined>;
+  getEvaluationByPeriodUnit(periodId: string, unitId: string): Promise<Evaluation | undefined>;
   createEvaluation(evaluation: InsertEvaluation): Promise<Evaluation>;
   updateEvaluation(id: string, evaluation: Partial<InsertEvaluation>): Promise<Evaluation | undefined>;
   
@@ -277,6 +278,16 @@ export class DatabaseStorage implements IStorage {
 
   async getEvaluation(id: string): Promise<Evaluation | undefined> {
     const result = await db.select().from(schema.evaluations).where(eq(schema.evaluations.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getEvaluationByPeriodUnit(periodId: string, unitId: string): Promise<Evaluation | undefined> {
+    const result = await db.select().from(schema.evaluations)
+      .where(and(
+        eq(schema.evaluations.periodId, periodId),
+        eq(schema.evaluations.unitId, unitId)
+      ))
+      .limit(1);
     return result[0];
   }
 

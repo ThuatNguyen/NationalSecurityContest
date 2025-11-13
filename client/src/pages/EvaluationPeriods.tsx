@@ -207,12 +207,18 @@ export default function EvaluationPeriods() {
         const formData = new FormData();
         formData.append('file', file);
         
-        const uploadRes = await apiRequest('/api/upload', {
+        const uploadRes = await fetch('/api/upload', {
           method: 'POST',
           body: formData,
+          credentials: 'include',
         });
-        
-        fileUrl = uploadRes.fileUrl;
+
+        if (!uploadRes.ok) {
+          throw new Error('Upload file thất bại');
+        }
+
+        const uploadData = await uploadRes.json();
+        fileUrl = uploadData.fileUrl;
       }
 
       // Update scores via bulk update API
@@ -226,11 +232,8 @@ export default function EvaluationPeriods() {
         selfScoreFile: fileUrl,
       }];
 
-      return apiRequest(`/api/evaluations/${summary.evaluation.id}/scores`, {
-        method: 'PUT',
-        body: JSON.stringify({ scores: scoresData }),
-        headers: { 'Content-Type': 'application/json' },
-      });
+      const res = await apiRequest('PUT', `/api/evaluations/${summary.evaluation.id}/scores`, { scores: scoresData });
+      return await res.json();
     },
     onSuccess: () => {
       // Invalidate and refetch
@@ -501,21 +504,35 @@ export default function EvaluationPeriods() {
                             {item.maxScore}
                           </td>
                           <td className="px-4 py-3 text-center border-l">
-                            {user.role === "user" ? (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleOpenScoringModal(item)}
-                                className="font-medium text-sm"
-                                data-testid={`button-selfscore-${item.id}`}
-                              >
-                                {typeof item.selfScore === 'number' ? item.selfScore.toFixed(2) : 'Chấm điểm'}
-                              </Button>
-                            ) : (
-                              <span className="font-medium text-sm" data-testid={`text-selfscore-${item.id}`}>
-                                {typeof item.selfScore === 'number' ? item.selfScore.toFixed(2) : '-'}
-                              </span>
-                            )}
+                            <div className="flex items-center justify-center gap-2">
+                              {user.role === "user" ? (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleOpenScoringModal(item)}
+                                  className="font-medium text-sm"
+                                  data-testid={`button-selfscore-${item.id}`}
+                                >
+                                  {typeof item.selfScore === 'number' ? item.selfScore.toFixed(2) : 'Chấm điểm'}
+                                </Button>
+                              ) : (
+                                <span className="font-medium text-sm" data-testid={`text-selfscore-${item.id}`}>
+                                  {typeof item.selfScore === 'number' ? item.selfScore.toFixed(2) : '-'}
+                                </span>
+                              )}
+                              {item.selfScoreFile && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => window.open(item.selfScoreFile, '_blank')}
+                                  className="h-8 w-8"
+                                  title="Xem file minh chứng"
+                                  data-testid={`button-view-file-${item.id}`}
+                                >
+                                  <FileText className="h-4 w-4 text-blue-600" />
+                                </Button>
+                              )}
+                            </div>
                           </td>
                           <td className="px-4 py-3 text-center">
                             {item.selfScoreFile ? (

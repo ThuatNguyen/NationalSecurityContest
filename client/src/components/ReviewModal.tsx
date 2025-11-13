@@ -117,7 +117,7 @@ export default function ReviewModal({
         
         <div className="space-y-6 py-4">
           {/* Self Score Reference */}
-          {selfScore !== undefined && (
+          {typeof selfScore === 'number' && (
             <div className="flex items-center gap-3 p-4 bg-accent/30 rounded-md border">
               <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary/10">
                 <CheckCircle2 className="w-5 h-5 text-primary" />

@@ -329,11 +329,11 @@ export default function EvaluationPeriods() {
                                 className="font-medium text-sm"
                                 data-testid={`button-selfscore-${item.id}`}
                               >
-                                {item.selfScore !== undefined ? item.selfScore.toFixed(2) : 'Chấm điểm'}
+                                {typeof item.selfScore === 'number' ? item.selfScore.toFixed(2) : 'Chấm điểm'}
                               </Button>
                             ) : (
                               <span className="font-medium text-sm" data-testid={`text-selfscore-${item.id}`}>
-                                {item.selfScore !== undefined ? item.selfScore.toFixed(2) : '-'}
+                                {typeof item.selfScore === 'number' ? item.selfScore.toFixed(2) : '-'}
                               </span>
                             )}
                           </td>
@@ -360,11 +360,11 @@ export default function EvaluationPeriods() {
                                 className="font-medium text-sm"
                                 data-testid={`button-review1-${item.id}`}
                               >
-                                {item.review1Score !== undefined ? item.review1Score.toFixed(2) : 'Thẩm định'}
+                                {typeof item.review1Score === 'number' ? item.review1Score.toFixed(2) : 'Thẩm định'}
                               </Button>
                             ) : (
                               <span className="font-medium text-sm" data-testid={`text-review1-${item.id}`}>
-                                {item.review1Score !== undefined ? item.review1Score.toFixed(2) : '-'}
+                                {typeof item.review1Score === 'number' ? item.review1Score.toFixed(2) : '-'}
                               </span>
                             )}
                           </td>
@@ -382,17 +382,17 @@ export default function EvaluationPeriods() {
                                 className="font-medium text-sm"
                                 data-testid={`button-review2-${item.id}`}
                               >
-                                {item.review2Score !== undefined ? item.review2Score.toFixed(2) : 'Thẩm định'}
+                                {typeof item.review2Score === 'number' ? item.review2Score.toFixed(2) : 'Thẩm định'}
                               </Button>
                             ) : (
                               <span className="font-medium text-sm" data-testid={`text-review2-${item.id}`}>
-                                {item.review2Score !== undefined ? item.review2Score.toFixed(2) : '-'}
+                                {typeof item.review2Score === 'number' ? item.review2Score.toFixed(2) : '-'}
                               </span>
                             )}
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span className="font-bold text-sm text-primary" data-testid={`text-finalscore-${item.id}`}>
-                              {item.finalScore !== undefined ? item.finalScore.toFixed(2) : '-'}
+                              {typeof item.finalScore === 'number' ? item.finalScore.toFixed(2) : '-'}
                             </span>
                           </td>
                         </tr>

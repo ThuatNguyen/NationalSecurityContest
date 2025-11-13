@@ -183,6 +183,10 @@ export default function UsersManagement() {
 
   const handleAdd = () => {
     resetForm();
+    // Auto-set cluster for cluster_leader when creating new user
+    if (currentUser?.role === "cluster_leader" && currentUser.clusterId) {
+      setFormData(prev => ({ ...prev, clusterId: currentUser.clusterId || "" }));
+    }
     setFormOpen(true);
   };
 

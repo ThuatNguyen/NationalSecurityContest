@@ -67,7 +67,7 @@ interface Cluster {
   name: string;
 }
 
-const MAIN_NAV_ITEMS: NavItem[] = [
+export const MAIN_NAV_ITEMS: NavItem[] = [
   { 
     title: "Tổng quan", 
     url: "/", 
@@ -91,7 +91,7 @@ const MAIN_NAV_ITEMS: NavItem[] = [
   },
 ];
 
-const SETTINGS_NAV_ITEMS: NavItem[] = [
+export const SETTINGS_NAV_ITEMS: NavItem[] = [
   { 
     title: "Quản lý đơn vị", 
     url: "/settings/units", 

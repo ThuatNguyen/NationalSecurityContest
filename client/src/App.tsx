@@ -4,8 +4,9 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/AppSidebar";
+import { AppSidebar, SETTINGS_NAV_ITEMS } from "@/components/AppSidebar";
 import LoginPage from "@/components/LoginPage";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Dashboard from "@/pages/Dashboard";
 import ScoringPage from "@/pages/ScoringPage";
 import UnitsManagement from "@/pages/UnitsManagement";
@@ -41,6 +42,11 @@ function ThemeToggle() {
 }
 
 function Router({ role }: { role: "admin" | "cluster_leader" | "user" }) {
+  const unitsAllowedRoles = SETTINGS_NAV_ITEMS.find(item => item.url === "/settings/units")?.allowedRoles || ["admin"];
+  const clustersAllowedRoles = SETTINGS_NAV_ITEMS.find(item => item.url === "/settings/clusters")?.allowedRoles || ["admin"];
+  const criteriaAllowedRoles = SETTINGS_NAV_ITEMS.find(item => item.url === "/settings/criteria")?.allowedRoles || ["admin"];
+  const usersAllowedRoles = SETTINGS_NAV_ITEMS.find(item => item.url === "/settings/users")?.allowedRoles || ["admin"];
+
   return (
     <Switch>
       <Route path="/" component={() => <Dashboard role={role} />} />
@@ -48,10 +54,26 @@ function Router({ role }: { role: "admin" | "cluster_leader" | "user" }) {
       <Route path="/reports" component={Reports} />
       <Route path="/scoring" component={() => <ScoringPage role={role} />} />
       <Route path="/self-scoring" component={() => <ScoringPage role="user" />} />
-      <Route path="/settings/units" component={UnitsManagement} />
-      <Route path="/settings/clusters" component={ClustersManagement} />
-      <Route path="/settings/criteria" component={CriteriaManagement} />
-      <Route path="/settings/users" component={UsersManagement} />
+      <Route path="/settings/units">
+        <ProtectedRoute allowedRoles={unitsAllowedRoles}>
+          <UnitsManagement />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/settings/clusters">
+        <ProtectedRoute allowedRoles={clustersAllowedRoles}>
+          <ClustersManagement />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/settings/criteria">
+        <ProtectedRoute allowedRoles={criteriaAllowedRoles}>
+          <CriteriaManagement />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/settings/users">
+        <ProtectedRoute allowedRoles={usersAllowedRoles}>
+          <UsersManagement />
+        </ProtectedRoute>
+      </Route>
       <Route path="/my-units" component={() => <div className="p-6">Đơn vị của tôi</div>} />
       <Route path="/cluster-reports" component={() => <div className="p-6">Báo cáo cụm</div>} />
       <Route path="/results" component={() => <div className="p-6">Kết quả</div>} />

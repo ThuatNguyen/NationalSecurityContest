@@ -272,20 +272,6 @@ export default function EvaluationPeriods() {
           )}
         </div>
 
-        {/* Kỳ thi đua */}
-        <div className="flex-1 min-w-[200px]">
-          <Label className="text-xs font-semibold uppercase tracking-wide mb-2 block">
-            Kỳ thi đua
-          </Label>
-          {loadingPeriods ? (
-            <Skeleton className="h-10 w-full" />
-          ) : (
-            <div className="h-10 px-3 py-2 border rounded-md bg-muted text-sm" data-testid="text-period">
-              {selectedPeriod?.name || 'Chưa có kỳ thi đua'}
-            </div>
-          )}
-        </div>
-
         {/* Cụm thi đua */}
         <div className="flex-1 min-w-[200px]">
           <Label htmlFor="filter-cluster" className="text-xs font-semibold uppercase tracking-wide mb-2 block">

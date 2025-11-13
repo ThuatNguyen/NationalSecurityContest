@@ -797,16 +797,16 @@ export default function EvaluationPeriods() {
                           </td>
                           <td className="px-4 py-3 text-center">
                             {item.selfScoreFile ? (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => window.open(item.selfScoreFile, '_blank')}
-                                className="h-8 w-8"
+                              <a
+                                href={item.selfScoreFile}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent transition-colors"
                                 title="Xem file minh chứng"
                                 data-testid={`button-view-self-file-${item.id}`}
                               >
                                 <FileText className="w-4 h-4 text-primary" />
-                              </Button>
+                              </a>
                             ) : (
                               <span className="text-xs text-muted-foreground">-</span>
                             )}

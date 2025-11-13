@@ -45,6 +45,7 @@ app.use(
       secure: process.env.NODE_ENV === "production",
       httpOnly: true,
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+      sameSite: 'lax', // Protect against CSRF while allowing same-site navigation
     },
   })
 );

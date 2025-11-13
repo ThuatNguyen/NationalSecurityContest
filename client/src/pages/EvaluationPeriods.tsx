@@ -2,7 +2,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { FileText, RefreshCw } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSession } from "@/lib/useSession";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -60,6 +60,26 @@ export default function EvaluationPeriods() {
   const [selectedCriteria, setSelectedCriteria] = useState<Criteria | null>(null);
   const [reviewType, setReviewType] = useState<"review1" | "review2">("review1");
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [selectedClusterId, setSelectedClusterId] = useState<string>('');
+  const [selectedUnitId, setSelectedUnitId] = useState<string>('');
+
+  // Query clusters
+  const { 
+    data: clusters, 
+    isLoading: loadingClusters 
+  } = useQuery<any[]>({
+    queryKey: ['/api/clusters'],
+    enabled: !!user,
+  });
+
+  // Query units (filtered by cluster if selected)
+  const { 
+    data: units, 
+    isLoading: loadingUnits 
+  } = useQuery<any[]>({
+    queryKey: ['/api/units'],
+    enabled: !!user,
+  });
 
   // Query evaluation periods
   const { 
@@ -72,10 +92,71 @@ export default function EvaluationPeriods() {
     enabled: !!user,
   });
 
+  // Memoize filtered units by selected cluster
+  const filteredUnits = useMemo(() => {
+    if (!units || !selectedClusterId) return [];
+    return units.filter(u => u.clusterId === selectedClusterId);
+  }, [units, selectedClusterId]);
+
+  // Set default cluster and unit based on role
+  useEffect(() => {
+    if (!user || !clusters || !units) return;
+
+    // Skip if already set
+    if (selectedClusterId && selectedUnitId) return;
+
+    if (user.role === 'admin') {
+      // Admin: default to first cluster
+      if (!selectedClusterId && clusters.length > 0) {
+        const firstCluster = clusters[0];
+        setSelectedClusterId(firstCluster.id);
+        
+        // Then default to first unit in that cluster
+        const unitsInCluster = units.filter(u => u.clusterId === firstCluster.id);
+        if (unitsInCluster.length > 0) {
+          setSelectedUnitId(unitsInCluster[0].id);
+        }
+      }
+    } else if (user.role === 'cluster_leader') {
+      // Cluster leader: lock to their cluster
+      if (!selectedClusterId && user.clusterId) {
+        setSelectedClusterId(user.clusterId);
+        
+        // Default to first unit in their cluster
+        const unitsInCluster = units.filter(u => u.clusterId === user.clusterId);
+        if (unitsInCluster.length > 0) {
+          setSelectedUnitId(unitsInCluster[0].id);
+        }
+      }
+    } else {
+      // User: lock to their unit's cluster and their unit
+      if (!selectedClusterId && !selectedUnitId && user.unitId) {
+        const userUnit = units.find(u => u.id === user.unitId);
+        if (userUnit) {
+          setSelectedClusterId(userUnit.clusterId);
+          setSelectedUnitId(user.unitId);
+        }
+      }
+    }
+  }, [user, clusters, units, selectedClusterId, selectedUnitId]);
+
+  // Handle cluster change (only for admin)
+  const handleClusterChange = (clusterId: string) => {
+    setSelectedClusterId(clusterId);
+    // Reset unit when cluster changes
+    setSelectedUnitId('');
+    
+    // Auto-select first unit in new cluster
+    const unitsInCluster = units?.filter(u => u.clusterId === clusterId) || [];
+    if (unitsInCluster.length > 0) {
+      setSelectedUnitId(unitsInCluster[0].id);
+    }
+  };
+
   // Memoize available years from periods
   const availableYears = useMemo(() => {
     if (!periods) return [];
-    const years = [...new Set(periods.map(p => p.year))].sort((a, b) => b - a);
+    const years = Array.from(new Set(periods.map(p => p.year))).sort((a, b) => b - a);
     return years;
   }, [periods]);
 
@@ -91,15 +172,15 @@ export default function EvaluationPeriods() {
 
   const selectedPeriod = filteredPeriods[0]; // Auto-select first period
 
-  // Query evaluation summary (only when period is available)
+  // Query evaluation summary (only when period and unit are available)
   const { 
     data: summary, 
     isLoading: loadingSummary, 
     error: summaryError,
     refetch: refetchSummary 
   } = useQuery<EvaluationSummary>({
-    queryKey: ['/api/evaluation-periods', selectedPeriod?.id, 'units', user?.unitId, 'summary'],
-    enabled: !!selectedPeriod?.id && !!user?.unitId,
+    queryKey: ['/api/evaluation-periods', selectedPeriod?.id, 'units', selectedUnitId, 'summary'],
+    enabled: !!selectedPeriod?.id && !!selectedUnitId,
   });
 
   const handleOpenScoringModal = (criteria: Criteria) => {
@@ -161,6 +242,7 @@ export default function EvaluationPeriods() {
       </div>
 
       <div className="flex flex-wrap gap-4 p-4 bg-card border rounded-md">
+        {/* Năm thi đua */}
         <div className="flex-1 min-w-[200px]">
           <Label htmlFor="filter-year" className="text-xs font-semibold uppercase tracking-wide mb-2 block">
             Năm thi đua
@@ -190,6 +272,7 @@ export default function EvaluationPeriods() {
           )}
         </div>
 
+        {/* Kỳ thi đua */}
         <div className="flex-1 min-w-[200px]">
           <Label className="text-xs font-semibold uppercase tracking-wide mb-2 block">
             Kỳ thi đua
@@ -203,13 +286,64 @@ export default function EvaluationPeriods() {
           )}
         </div>
 
+        {/* Cụm thi đua */}
         <div className="flex-1 min-w-[200px]">
-          <Label className="text-xs font-semibold uppercase tracking-wide mb-2 block">
+          <Label htmlFor="filter-cluster" className="text-xs font-semibold uppercase tracking-wide mb-2 block">
+            Cụm thi đua
+          </Label>
+          {loadingClusters ? (
+            <Skeleton className="h-10 w-full" />
+          ) : user.role === 'admin' ? (
+            <Select 
+              value={selectedClusterId} 
+              onValueChange={handleClusterChange}
+            >
+              <SelectTrigger id="filter-cluster" data-testid="select-cluster">
+                <SelectValue placeholder="Chọn cụm" />
+              </SelectTrigger>
+              <SelectContent>
+                {clusters?.map(cluster => (
+                  <SelectItem key={cluster.id} value={cluster.id}>
+                    {cluster.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <div className="h-10 px-3 py-2 border rounded-md bg-muted text-sm" data-testid="text-cluster">
+              {clusters?.find(c => c.id === selectedClusterId)?.name || 'Chưa có cụm'}
+            </div>
+          )}
+        </div>
+
+        {/* Đơn vị */}
+        <div className="flex-1 min-w-[200px]">
+          <Label htmlFor="filter-unit" className="text-xs font-semibold uppercase tracking-wide mb-2 block">
             Đơn vị
           </Label>
-          <div className="h-10 px-3 py-2 border rounded-md bg-muted text-sm" data-testid="text-unit">
-            {user.unit?.name || 'Chưa có đơn vị'}
-          </div>
+          {loadingUnits ? (
+            <Skeleton className="h-10 w-full" />
+          ) : user.role === 'user' ? (
+            <div className="h-10 px-3 py-2 border rounded-md bg-muted text-sm" data-testid="text-unit">
+              {units?.find(u => u.id === selectedUnitId)?.name || 'Chưa có đơn vị'}
+            </div>
+          ) : (
+            <Select 
+              value={selectedUnitId} 
+              onValueChange={setSelectedUnitId}
+            >
+              <SelectTrigger id="filter-unit" data-testid="select-unit">
+                <SelectValue placeholder="Chọn đơn vị" />
+              </SelectTrigger>
+              <SelectContent>
+                {filteredUnits.map(unit => (
+                  <SelectItem key={unit.id} value={unit.id}>
+                    {unit.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
       </div>
 

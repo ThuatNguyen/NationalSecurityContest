@@ -6,7 +6,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Edit, Trash2, Plus, FolderPlus } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { Edit, Trash2, Plus, FolderPlus, Info } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -376,16 +378,60 @@ export default function CriteriaManagement() {
         </div>
       </Card>
 
-      {canManage && isClusterSelected && (
+      {canManage && !isClusterSelected && (
+        <Alert data-testid="alert-select-cluster">
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            Vui lòng chọn <strong>Cụm thi đua</strong> từ bộ lọc phía trên để bắt đầu quản lý tiêu chí
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {canManage && (
         <div className="flex gap-3">
-          <Button onClick={handleAddGroup} data-testid="button-add-group">
-            <FolderPlus className="w-4 h-4 mr-2" />
-            Thêm nhóm tiêu chí
-          </Button>
-          <Button onClick={() => handleAddCriteria()} disabled={!criteriaGroups || criteriaGroups.length === 0} data-testid="button-add-criteria">
-            <Plus className="w-4 h-4 mr-2" />
-            Thêm tiêu chí
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div>
+                <Button 
+                  onClick={handleAddGroup} 
+                  disabled={!isClusterSelected}
+                  data-testid="button-add-group"
+                >
+                  <FolderPlus className="w-4 h-4 mr-2" />
+                  Thêm nhóm tiêu chí
+                </Button>
+              </div>
+            </TooltipTrigger>
+            {!isClusterSelected && (
+              <TooltipContent>
+                <p>Chọn cụm thi đua để bật chức năng quản lý</p>
+              </TooltipContent>
+            )}
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div>
+                <Button 
+                  onClick={() => handleAddCriteria()} 
+                  disabled={!isClusterSelected || !criteriaGroups || criteriaGroups.length === 0}
+                  data-testid="button-add-criteria"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Thêm tiêu chí
+                </Button>
+              </div>
+            </TooltipTrigger>
+            {!isClusterSelected ? (
+              <TooltipContent>
+                <p>Chọn cụm thi đua để bật chức năng quản lý</p>
+              </TooltipContent>
+            ) : (!criteriaGroups || criteriaGroups.length === 0) && (
+              <TooltipContent>
+                <p>Tạo nhóm tiêu chí trước khi thêm tiêu chí</p>
+              </TooltipContent>
+            )}
+          </Tooltip>
         </div>
       )}
 

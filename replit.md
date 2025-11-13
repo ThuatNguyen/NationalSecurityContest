@@ -15,6 +15,23 @@ This is a web application for scoring competitive evaluations in the Vietnamese 
 
 ## Recent Changes
 
+**November 2025 - Cluster Leader User Management Access**
+- **Extended Permissions:** Cluster leaders can now access Users Management to manage users within their cluster
+  - Navigation: "Quản lý người dùng" menu item visible to both admin and cluster_leader roles
+  - Route protection: /settings/users allows admin + cluster_leader access
+- **Auto-Scoped User Filtering:** 
+  - Cluster leaders see only users in their cluster (automatic filtering)
+  - Context alert displays: "Bạn đang quản lý người dùng trong cụm: [cluster name]"
+  - Users table filtered by cluster on both frontend and backend
+- **Form Auto-Population:**
+  - When cluster leader creates new user, cluster selector auto-fills with their cluster
+  - Cluster selector is disabled to prevent cross-cluster assignment
+  - Works correctly for creating cluster_leader and user roles
+- **Backend Security:**
+  - GET /api/users filters by req.user.clusterId for cluster_leader role
+  - Admin access unchanged (sees all users)
+- **E2E Tested:** All workflows verified with Playwright
+
 **November 2025 - Unified Menu with Role-Based Access Control**
 - **Architecture:** Refactored navigation to single NAV_ITEMS configuration with role-based metadata
   - All roles see unified menu structure with appropriate items filtered by allowedRoles
@@ -29,7 +46,6 @@ This is a web application for scoring competitive evaluations in the Vietnamese 
   - Unit users: blocked from all Settings pages
   - Context indicators (Alert badges) show active data scope: "Đang xem dữ liệu cụm: X"
 - **Backend Authorization:** All Settings endpoints protected with requireRole middleware
-  - /api/users: admin only
   - /api/clusters: admin only (write), all roles (read)
   - /api/units, /api/criteria: admin + cluster_leader (write), all roles (read)
 - **E2E Testing:** Verified with Playwright across all 3 roles

@@ -184,9 +184,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Upload file endpoint
   app.post("/api/upload", requireAuth, upload.single('file'), async (req, res, next) => {
     try {
+      console.log('[UPLOAD DEBUG]', {
+        method: req.method,
+        url: req.originalUrl,
+        contentType: req.headers['content-type'],
+        hasFile: !!req.file,
+        fileName: req.file?.originalname,
+        fileSize: req.file?.size,
+        fileMime: req.file?.mimetype
+      });
+      
       if (!req.file) {
+        console.log('[UPLOAD ERROR] No file in request');
         return res.status(400).json({ message: "Không có file được tải lên" });
       }
+      
+      // Check first bytes of uploaded file
+      const filePath = path.join(uploadDir, req.file.filename);
+      const firstBytes = fs.readFileSync(filePath, { encoding: 'utf8', flag: 'r' }).substring(0, 100);
+      console.log('[FILE CONTENT CHECK]', { 
+        filename: req.file.filename,
+        firstBytes,
+        isPDF: firstBytes.startsWith('%PDF')
+      });
       
       console.log(`[FILE UPLOAD] File received: ${req.file.originalname}, Size: ${req.file.size} bytes, MIME: ${req.file.mimetype}`);
       

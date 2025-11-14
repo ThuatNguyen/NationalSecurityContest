@@ -21,6 +21,14 @@ import {
 } from "@shared/schema";
 import { z } from "zod";
 
+/**
+ * Thin helper that delegates to transactional storage method.
+ * All recalculation logic is in storage layer for proper transaction handling.
+ */
+async function recalculateEvaluationScores(evaluationId: string): Promise<{ scoresUpdated: number }> {
+  return await storage.recalculateEvaluationScoresTx(evaluationId);
+}
+
 declare global {
   namespace Express {
     interface User {
@@ -1287,6 +1295,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Recalculate finalScores (Admin only - for migration/maintenance)
+  app.post("/api/evaluations/:id/recalculate", requireRole("admin"), async (req, res, next) => {
+    try {
+      const evaluation = await storage.getEvaluation(req.params.id);
+      if (!evaluation) {
+        return res.status(404).json({ message: "Không tìm thấy đánh giá" });
+      }
+      
+      // Audit log for manual recalculation
+      console.log(`[ADMIN RECALCULATE] User ${req.user!.id} (${req.user!.username}) triggered recalculation for evaluation ${req.params.id}`);
+      
+      const result = await recalculateEvaluationScores(req.params.id);
+      
+      console.log(`[ADMIN RECALCULATE] Completed: ${result.scoresUpdated} scores updated for evaluation ${req.params.id}`);
+      
+      res.json({ 
+        message: "Đã tính lại điểm cuối cùng thành công",
+        scoresUpdated: result.scoresUpdated
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   // Complete review 2 (Cluster leader)
   app.post("/api/evaluations/:id/review2", requireRole("admin", "cluster_leader"), async (req, res, next) => {
     try {
@@ -1643,14 +1675,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             updateData.review2File = scoreData.review2File;
           }
           
-          // Calculate finalScore: review2 ?? review1 ?? self (using nullish coalescing to preserve 0 scores)
-          const currentSelf = scoreData.selfScore !== undefined ? scoreData.selfScore : (existingScore.selfScore !== null ? parseFloat(existingScore.selfScore) : 0);
-          const currentReview1 = scoreData.review1Score !== undefined ? scoreData.review1Score : (existingScore.review1Score !== null ? parseFloat(existingScore.review1Score) : null);
-          const currentReview2 = scoreData.review2Score !== undefined ? scoreData.review2Score : (existingScore.review2Score !== null ? parseFloat(existingScore.review2Score) : null);
-          
-          const finalScore = currentReview2 ?? currentReview1 ?? currentSelf;
-          updateData.finalScore = finalScore.toString();
-          
+          // Note: finalScore will be recalculated by helper function after all updates
           score = await storage.updateScore(existingScore.id, updateData);
         } else {
           // Create new score
@@ -1667,37 +1692,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             newScore.selfScoreFile = scoreData.selfScoreFile;
           }
           
-          // Calculate initial finalScore (use ?? to preserve 0 scores)
-          const finalScore = scoreData.selfScore ?? 0;
-          newScore.finalScore = finalScore.toString();
-          
+          // Note: finalScore will be set by helper function after creation
           score = await storage.createScore(newScore);
         }
         
         updatedScores.push(score);
       }
       
-      // Recalculate totals from ALL scores for this evaluation (not just updated ones)
-      const finalAllScores = await storage.getScores(req.params.id);
-      let totalSelfScore = 0;
-      let totalReview1Score = 0;
-      let totalReview2Score = 0;
-      let totalFinalScore = 0;
-      
-      for (const score of finalAllScores) {
-        if (score.selfScore) totalSelfScore += parseFloat(score.selfScore);
-        if (score.review1Score) totalReview1Score += parseFloat(score.review1Score);
-        if (score.review2Score) totalReview2Score += parseFloat(score.review2Score);
-        if (score.finalScore) totalFinalScore += parseFloat(score.finalScore);
-      }
-      
-      // Update evaluation totals
-      await storage.updateEvaluation(req.params.id, {
-        totalSelfScore: totalSelfScore.toString(),
-        totalReview1Score: totalReview1Score > 0 ? totalReview1Score.toString() : null,
-        totalReview2Score: totalReview2Score > 0 ? totalReview2Score.toString() : null,
-        totalFinalScore: totalFinalScore.toString(),
-      });
+      // Recalculate finalScores and totals using helper function
+      await recalculateEvaluationScores(req.params.id);
       
       res.json({ message: "Cập nhật điểm thành công", scores: updatedScores });
     } catch (error) {

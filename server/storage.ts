@@ -73,6 +73,9 @@ export interface IStorage {
   createScore(score: InsertScore): Promise<Score>;
   updateScore(id: string, score: Partial<InsertScore>): Promise<Score | undefined>;
   
+  // Recalculation (transactional)
+  recalculateEvaluationScoresTx(evaluationId: string): Promise<{ scoresUpdated: number }>;
+  
   // Evaluation Summary (aggregated data for evaluation periods page)
   getEvaluationSummary(periodId: string, unitId: string): Promise<{
     period: EvaluationPeriod;
@@ -431,6 +434,74 @@ export class DatabaseStorage implements IStorage {
       evaluation,
       criteriaGroups,
     };
+  }
+
+  // Recalculate finalScores (transactional)
+  async recalculateEvaluationScoresTx(evaluationId: string): Promise<{ scoresUpdated: number }> {
+    return await db.transaction(async (tx) => {
+      // Fetch all scores for this evaluation within transaction
+      const scores = await tx.select().from(schema.scores).where(eq(schema.scores.evaluationId, evaluationId));
+      
+      // Precompute finalScore and totals in memory
+      let totalSelfScore = 0;
+      let totalReview1Score = 0;
+      let totalReview2Score = 0;
+      let totalFinalScore = 0;
+      
+      // Track whether we have ANY review scores (to distinguish 0 from null)
+      let hasAnyReview1 = false;
+      let hasAnyReview2 = false;
+      
+      const updates: Array<{ id: string; finalScore: string }> = [];
+      
+      for (const score of scores) {
+        const selfScore = score.selfScore ? parseFloat(score.selfScore) : 0;
+        const review1Score = score.review1Score ? parseFloat(score.review1Score) : null;
+        const review2Score = score.review2Score ? parseFloat(score.review2Score) : null;
+        
+        // Calculate finalScore using MAX logic
+        let finalScore: number;
+        if (review1Score !== null && review2Score !== null) {
+          finalScore = Math.max(review1Score, review2Score);
+        } else if (review1Score !== null) {
+          finalScore = review1Score;
+        } else if (review2Score !== null) {
+          finalScore = review2Score;
+        } else {
+          finalScore = selfScore;
+        }
+        
+        updates.push({ id: score.id, finalScore: finalScore.toString() });
+        
+        // Accumulate totals
+        totalSelfScore += selfScore;
+        if (review1Score !== null) {
+          totalReview1Score += review1Score;
+          hasAnyReview1 = true;
+        }
+        if (review2Score !== null) {
+          totalReview2Score += review2Score;
+          hasAnyReview2 = true;
+        }
+        totalFinalScore += finalScore;
+      }
+      
+      // Update all scores within transaction
+      for (const update of updates) {
+        await tx.update(schema.scores).set({ finalScore: update.finalScore }).where(eq(schema.scores.id, update.id));
+      }
+      
+      // Update evaluation totals within same transaction
+      // Preserve zero totals (scored as zero) vs null (not scored)
+      await tx.update(schema.evaluations).set({
+        totalSelfScore: totalSelfScore.toString(),
+        totalReview1Score: hasAnyReview1 ? totalReview1Score.toString() : null,
+        totalReview2Score: hasAnyReview2 ? totalReview2Score.toString() : null,
+        totalFinalScore: totalFinalScore.toString(),
+      }).where(eq(schema.evaluations.id, evaluationId));
+      
+      return { scoresUpdated: scores.length };
+    });
   }
 }
 

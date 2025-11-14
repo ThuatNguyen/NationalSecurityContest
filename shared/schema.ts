@@ -157,6 +157,7 @@ export const scores = pgTable("scores", {
   
   // Explanation stage
   explanation: text("explanation"),
+  explanationFile: text("explanation_file"),
   explanationDate: timestamp("explanation_date"),
   
   // Review 2 stage

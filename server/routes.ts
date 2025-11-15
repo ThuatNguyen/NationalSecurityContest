@@ -503,11 +503,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/clusters", requireRole("admin"), async (req, res, next) => {
     try {
       const clusterData = insertClusterSchema.parse(req.body);
+      
+      // Validate cluster_type
+      const validClusterTypes = ['phong', 'xa_phuong', 'khac'];
+      if (!validClusterTypes.includes(clusterData.clusterType)) {
+        return res.status(400).json({ 
+          message: "Loại cụm không hợp lệ. Chỉ chấp nhận: phong, xa_phuong, khac" 
+        });
+      }
+      
       const cluster = await storage.createCluster(clusterData);
       res.json(cluster);
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Dữ liệu không hợp lệ", errors: error.errors });
+      }
+      if (error instanceof Error) {
+        return res.status(400).json({ message: error.message });
       }
       next(error);
     }
@@ -516,6 +528,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/clusters/:id", requireRole("admin"), async (req, res, next) => {
     try {
       const clusterData = insertClusterSchema.partial().parse(req.body);
+      
+      // Validate cluster_type if provided
+      if (clusterData.clusterType) {
+        const validClusterTypes = ['phong', 'xa_phuong', 'khac'];
+        if (!validClusterTypes.includes(clusterData.clusterType)) {
+          return res.status(400).json({ 
+            message: "Loại cụm không hợp lệ. Chỉ chấp nhận: phong, xa_phuong, khac" 
+          });
+        }
+      }
+      
       const cluster = await storage.updateCluster(req.params.id, clusterData);
       if (!cluster) {
         return res.status(404).json({ message: "Không tìm thấy cụm thi đua" });
@@ -524,6 +547,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Dữ liệu không hợp lệ", errors: error.errors });
+      }
+      if (error instanceof Error) {
+        return res.status(400).json({ message: error.message });
       }
       next(error);
     }
@@ -539,6 +565,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.deleteCluster(req.params.id);
       res.json({ message: "Xóa thành công" });
     } catch (error) {
+      if (error instanceof Error) {
+        return res.status(400).json({ message: error.message });
+      }
       next(error);
     }
   });
@@ -587,6 +616,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Dữ liệu không hợp lệ", errors: error.errors });
       }
+      if (error instanceof Error) {
+        return res.status(400).json({ message: error.message });
+      }
       next(error);
     }
   });
@@ -618,6 +650,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Dữ liệu không hợp lệ", errors: error.errors });
       }
+      if (error instanceof Error) {
+        return res.status(400).json({ message: error.message });
+      }
       next(error);
     }
   });
@@ -636,6 +671,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.deleteUnit(req.params.id);
       res.json({ message: "Xóa thành công" });
     } catch (error) {
+      if (error instanceof Error) {
+        return res.status(400).json({ message: error.message });
+      }
       next(error);
     }
   });

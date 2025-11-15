@@ -1,5 +1,4 @@
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
+import { db } from "./db";
 import { eq, and, sql as sqlExpr } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import type { 
@@ -13,11 +12,8 @@ import type {
   Score, InsertScore
 } from "@shared/schema";
 
-const sql = neon(process.env.DATABASE_URL!);
-const db = drizzle(sql, { schema });
-
 export interface IStorage {
-  // Users
+  // Usersnpm install -g npm@11.6.2
   getUsers(): Promise<User[]>;
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
@@ -144,16 +140,70 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createCluster(cluster: InsertCluster): Promise<Cluster> {
+    // Check for duplicate name
+    const existingByName = await db.select().from(schema.clusters)
+      .where(eq(schema.clusters.name, cluster.name))
+      .limit(1);
+    if (existingByName.length > 0) {
+      throw new Error('Tên cụm thi đua đã tồn tại');
+    }
+    
+    // Check for duplicate short_name
+    const existingByShortName = await db.select().from(schema.clusters)
+      .where(eq(schema.clusters.shortName, cluster.shortName))
+      .limit(1);
+    if (existingByShortName.length > 0) {
+      throw new Error('Tên viết tắt cụm thi đua đã tồn tại');
+    }
+    
     const result = await db.insert(schema.clusters).values(cluster).returning();
     return result[0];
   }
 
   async updateCluster(id: string, cluster: Partial<InsertCluster>): Promise<Cluster | undefined> {
-    const result = await db.update(schema.clusters).set(cluster).where(eq(schema.clusters.id, id)).returning();
+    // Check for duplicate name (excluding current cluster)
+    if (cluster.name) {
+      const existingByName = await db.select().from(schema.clusters)
+        .where(and(
+          eq(schema.clusters.name, cluster.name),
+          sqlExpr`${schema.clusters.id} != ${id}`
+        ))
+        .limit(1);
+      if (existingByName.length > 0) {
+        throw new Error('Tên cụm thi đua đã tồn tại');
+      }
+    }
+    
+    // Check for duplicate short_name (excluding current cluster)
+    if (cluster.shortName) {
+      const existingByShortName = await db.select().from(schema.clusters)
+        .where(and(
+          eq(schema.clusters.shortName, cluster.shortName),
+          sqlExpr`${schema.clusters.id} != ${id}`
+        ))
+        .limit(1);
+      if (existingByShortName.length > 0) {
+        throw new Error('Tên viết tắt cụm thi đua đã tồn tại');
+      }
+    }
+    
+    const result = await db.update(schema.clusters).set({
+      ...cluster,
+      updatedAt: new Date(),
+    }).where(eq(schema.clusters.id, id)).returning();
     return result[0];
   }
 
   async deleteCluster(id: string): Promise<void> {
+    // Check if cluster has any units
+    const units = await db.select().from(schema.units)
+      .where(eq(schema.units.clusterId, id))
+      .limit(1);
+    
+    if (units.length > 0) {
+      throw new Error('Không thể xóa cụm thi đua vì đang có đơn vị trực thuộc');
+    }
+    
     await db.delete(schema.clusters).where(eq(schema.clusters.id, id));
   }
 
@@ -171,16 +221,79 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createUnit(unit: InsertUnit): Promise<Unit> {
+    // Check for duplicate name
+    const existingByName = await db.select().from(schema.units)
+      .where(eq(schema.units.name, unit.name))
+      .limit(1);
+    if (existingByName.length > 0) {
+      throw new Error('Tên đơn vị đã tồn tại');
+    }
+    
+    // Check for duplicate short_name
+    const existingByShortName = await db.select().from(schema.units)
+      .where(eq(schema.units.shortName, unit.shortName))
+      .limit(1);
+    if (existingByShortName.length > 0) {
+      throw new Error('Tên viết tắt đơn vị đã tồn tại');
+    }
+    
     const result = await db.insert(schema.units).values(unit).returning();
     return result[0];
   }
 
   async updateUnit(id: string, unit: Partial<InsertUnit>): Promise<Unit | undefined> {
-    const result = await db.update(schema.units).set(unit).where(eq(schema.units.id, id)).returning();
+    // Check for duplicate name (excluding current unit)
+    if (unit.name) {
+      const existingByName = await db.select().from(schema.units)
+        .where(and(
+          eq(schema.units.name, unit.name),
+          sqlExpr`${schema.units.id} != ${id}`
+        ))
+        .limit(1);
+      if (existingByName.length > 0) {
+        throw new Error('Tên đơn vị đã tồn tại');
+      }
+    }
+    
+    // Check for duplicate short_name (excluding current unit)
+    if (unit.shortName) {
+      const existingByShortName = await db.select().from(schema.units)
+        .where(and(
+          eq(schema.units.shortName, unit.shortName),
+          sqlExpr`${schema.units.id} != ${id}`
+        ))
+        .limit(1);
+      if (existingByShortName.length > 0) {
+        throw new Error('Tên viết tắt đơn vị đã tồn tại');
+      }
+    }
+    
+    const result = await db.update(schema.units).set({
+      ...unit,
+      updatedAt: new Date(),
+    }).where(eq(schema.units.id, id)).returning();
     return result[0];
   }
 
   async deleteUnit(id: string): Promise<void> {
+    // Check if unit has any evaluations (being used in scoring)
+    const evaluations = await db.select().from(schema.evaluations)
+      .where(eq(schema.evaluations.unitId, id))
+      .limit(1);
+    
+    if (evaluations.length > 0) {
+      throw new Error('Không thể xóa đơn vị vì đang được sử dụng trong đánh giá');
+    }
+    
+    // Check if unit has any users
+    const users = await db.select().from(schema.users)
+      .where(eq(schema.users.unitId, id))
+      .limit(1);
+    
+    if (users.length > 0) {
+      throw new Error('Không thể xóa đơn vị vì đang có người dùng trực thuộc');
+    }
+    
     await db.delete(schema.units).where(eq(schema.units.id, id));
   }
 

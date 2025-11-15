@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { Cluster, InsertCluster } from "@shared/schema";
+import type { Cluster, InsertCluster, Unit } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,8 @@ export default function ClustersManagement() {
   const [editingCluster, setEditingCluster] = useState<Cluster | null>(null);
   const [formData, setFormData] = useState<InsertCluster>({
     name: "",
+    shortName: "",
+    clusterType: "khac",
     description: "",
   });
   const { toast } = useToast();
@@ -31,6 +33,11 @@ export default function ClustersManagement() {
   // Fetch clusters
   const { data: clusters, isLoading } = useQuery({
     queryKey: ["/api/clusters"],
+  });
+
+  // Fetch all units to count units per cluster
+  const { data: units = [] } = useQuery<Unit[]>({
+    queryKey: ["/api/units"],
   });
 
   // Create mutation
@@ -92,7 +99,7 @@ export default function ClustersManagement() {
   });
 
   const resetForm = () => {
-    setFormData({ name: "", description: "" });
+    setFormData({ name: "", shortName: "", clusterType: "khac", description: "" });
     setEditingCluster(null);
   };
 
@@ -101,6 +108,8 @@ export default function ClustersManagement() {
       setEditingCluster(cluster);
       setFormData({
         name: cluster.name,
+        shortName: cluster.shortName,
+        clusterType: cluster.clusterType,
         description: cluster.description || "",
       });
     } else {
@@ -116,6 +125,15 @@ export default function ClustersManagement() {
       toast({ 
         title: "Lỗi", 
         description: "Vui lòng nhập tên cụm thi đua",
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    if (!formData.shortName.trim()) {
+      toast({ 
+        title: "Lỗi", 
+        description: "Vui lòng nhập tên viết tắt",
         variant: "destructive" 
       });
       return;
@@ -137,8 +155,22 @@ export default function ClustersManagement() {
   // Filter clusters
   const filteredClusters = ((clusters as Cluster[] | undefined) || []).filter((cluster: Cluster) =>
     cluster.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    cluster.shortName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (cluster.description && cluster.description.toLowerCase().includes(searchTerm.toLowerCase()))
   );
+
+  const getClusterTypeLabel = (type: string) => {
+    switch (type) {
+      case 'phong':
+        return 'Cụm cấp phòng';
+      case 'xa_phuong':
+        return 'Cụm Công an xã/phường/đặc khu';
+      case 'khac':
+        return 'Cụm khác';
+      default:
+        return type;
+    }
+  };
 
   const isPending = createMutation.isPending || updateMutation.isPending;
 
@@ -194,16 +226,30 @@ export default function ClustersManagement() {
                   <tr className="border-b bg-muted/50">
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide w-16">STT</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Tên cụm</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Tên viết tắt</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Loại cụm</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Số đơn vị</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Mô tả</th>
                     <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide w-32">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredClusters.map((cluster: Cluster, index: number) => (
+                  {filteredClusters.map((cluster: Cluster, index: number) => {
+                    const unitCount = units.filter(u => u.clusterId === cluster.id).length;
+                    return (
                     <tr key={cluster.id} className="border-b hover-elevate" data-testid={`row-cluster-${cluster.id}`}>
                       <td className="px-4 py-3 text-sm text-center">{index + 1}</td>
                       <td className="px-4 py-3 text-sm font-medium" data-testid={`text-name-${cluster.id}`}>
                         {cluster.name}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {cluster.shortName}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {getClusterTypeLabel(cluster.clusterType)}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-center font-medium">
+                        {unitCount}
                       </td>
                       <td className="px-4 py-3 text-sm text-muted-foreground">
                         {cluster.description || "—"}
@@ -229,7 +275,8 @@ export default function ClustersManagement() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -265,6 +312,39 @@ export default function ClustersManagement() {
                   disabled={isPending}
                   data-testid="input-cluster-name"
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="shortName">
+                  Tên viết tắt <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="shortName"
+                  value={formData.shortName}
+                  onChange={(e) => setFormData({ ...formData, shortName: e.target.value.toUpperCase() })}
+                  placeholder="Ví dụ: CAQ1"
+                  disabled={isPending}
+                  data-testid="input-cluster-short-name"
+                  maxLength={10}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="clusterType">
+                  Loại cụm <span className="text-destructive">*</span>
+                </Label>
+                <select
+                  id="clusterType"
+                  value={formData.clusterType}
+                  onChange={(e) => setFormData({ ...formData, clusterType: e.target.value })}
+                  disabled={isPending}
+                  data-testid="select-cluster-type"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="phong">Cụm cấp phòng</option>
+                  <option value="xa_phuong">Cụm Công an xã/phường/đặc khu</option>
+                  <option value="khac">Cụm khác</option>
+                </select>
               </div>
 
               <div className="space-y-2">

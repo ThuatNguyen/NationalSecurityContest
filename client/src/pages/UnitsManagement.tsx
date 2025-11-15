@@ -35,6 +35,7 @@ export default function UnitsManagement() {
   const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
   const [formData, setFormData] = useState<InsertUnit>({
     name: "",
+    shortName: "",
     clusterId: "",
     description: "",
   });
@@ -124,7 +125,7 @@ export default function UnitsManagement() {
   });
 
   const resetForm = () => {
-    setFormData({ name: "", clusterId: "", description: "" });
+    setFormData({ name: "", shortName: "", clusterId: "", description: "" });
     setEditingUnit(null);
   };
 
@@ -133,6 +134,7 @@ export default function UnitsManagement() {
       setEditingUnit(unit);
       setFormData({
         name: unit.name,
+        shortName: unit.shortName,
         clusterId: unit.clusterId,
         description: unit.description || "",
       });
@@ -149,6 +151,15 @@ export default function UnitsManagement() {
       toast({ 
         title: "Lỗi", 
         description: "Vui lòng nhập tên đơn vị",
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    if (!formData.shortName.trim()) {
+      toast({ 
+        title: "Lỗi", 
+        description: "Vui lòng nhập tên viết tắt",
         variant: "destructive" 
       });
       return;
@@ -185,6 +196,7 @@ export default function UnitsManagement() {
   // Filter units by search term
   const filteredUnits = ((units as Unit[] | undefined) || []).filter((unit: Unit) =>
     unit.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    unit.shortName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (unit.description && unit.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
     getClusterName(unit.clusterId).toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -275,6 +287,7 @@ export default function UnitsManagement() {
                   <tr className="border-b bg-muted/50">
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide w-16">STT</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Tên đơn vị</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Tên viết tắt</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Cụm thi đua</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">Mô tả</th>
                     <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide w-32">Thao tác</th>
@@ -286,6 +299,9 @@ export default function UnitsManagement() {
                       <td className="px-4 py-3 text-sm text-center">{index + 1}</td>
                       <td className="px-4 py-3 text-sm font-medium" data-testid={`text-name-${unit.id}`}>
                         {unit.name}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {unit.shortName}
                       </td>
                       <td className="px-4 py-3 text-sm text-muted-foreground">
                         {getClusterName(unit.clusterId)}
@@ -349,6 +365,21 @@ export default function UnitsManagement() {
                   placeholder="Ví dụ: Công an phường Đống Đa"
                   disabled={isPending}
                   data-testid="input-unit-name"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="shortName">
+                  Tên viết tắt <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="shortName"
+                  value={formData.shortName}
+                  onChange={(e) => setFormData({ ...formData, shortName: e.target.value.toUpperCase() })}
+                  placeholder="Ví dụ: CAPĐD"
+                  disabled={isPending}
+                  data-testid="input-unit-short-name"
+                  maxLength={10}
                 />
               </div>
 

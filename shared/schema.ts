@@ -6,18 +6,23 @@ import { z } from "zod";
 // Clusters (Cụm thi đua) - defined first for foreign key references
 export const clusters = pgTable("clusters", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
+  name: text("name").notNull().unique(),
+  shortName: text("short_name").notNull().unique(),
+  clusterType: text("cluster_type").notNull(), // phong, xa_phuong, khac
   description: text("description"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 // Units (Đơn vị)
 export const units = pgTable("units", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  clusterId: varchar("cluster_id").notNull().references(() => clusters.id, { onDelete: "cascade" }),
+  name: text("name").notNull().unique(),
+  shortName: text("short_name").notNull().unique(),
+  clusterId: varchar("cluster_id").notNull().references(() => clusters.id, { onDelete: "restrict" }),
   description: text("description"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 // Users table with role-based access
@@ -35,6 +40,7 @@ export const users = pgTable("users", {
 export const insertClusterSchema = createInsertSchema(clusters).omit({
   id: true,
   createdAt: true,
+  updatedAt: true,
 });
 
 export type InsertCluster = z.infer<typeof insertClusterSchema>;
@@ -43,6 +49,7 @@ export type Cluster = typeof clusters.$inferSelect;
 export const insertUnitSchema = createInsertSchema(units).omit({
   id: true,
   createdAt: true,
+  updatedAt: true,
 });
 
 export type InsertUnit = z.infer<typeof insertUnitSchema>;

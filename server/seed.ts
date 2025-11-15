@@ -1,10 +1,6 @@
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
+import { db } from "./db";
 import * as schema from "@shared/schema";
 import bcrypt from "bcryptjs";
-
-const sql = neon(process.env.DATABASE_URL!);
-const db = drizzle(sql, { schema });
 
 async function seed() {
   console.log("🌱 Bắt đầu seed dữ liệu...");
@@ -12,46 +8,82 @@ async function seed() {
   try {
     // Create clusters
     console.log("Tạo Cụm thi đua...");
-    const [cluster1, cluster2] = await db.insert(schema.clusters).values([
+    const [cluster1, cluster2, cluster3] = await db.insert(schema.clusters).values([
       {
-        name: "Cụm Công an thành phố",
-        description: "Cụm thi đua các đơn vị Công an cấp thành phố",
+        name: "Cụm Công an cấp Phòng Thành phố",
+        shortName: "CACPTP",
+        clusterType: "phong",
+        description: "Cụm thi đua các đơn vị Công an cấp phòng thuộc Thành phố",
       },
       {
-        name: "Cụm Công an huyện",
-        description: "Cụm thi đua các đơn vị Công an cấp huyện",
+        name: "Cụm Công an xã/phường Quận 1",
+        shortName: "CAXPQ1",
+        clusterType: "xa_phuong",
+        description: "Cụm thi đua Công an các xã, phường thuộc Quận 1",
+      },
+      {
+        name: "Cụm Công an xã/phường Quận 3",
+        shortName: "CAXPQ3",
+        clusterType: "xa_phuong",
+        description: "Cụm thi đua Công an các xã, phường thuộc Quận 3",
       },
     ]).returning();
 
-    console.log(`✓ Đã tạo ${2} cụm thi đua`);
+    console.log(`✓ Đã tạo ${3} cụm thi đua`);
 
     // Create units
     console.log("Tạo Đơn vị...");
     const units = await db.insert(schema.units).values([
+      // Units for cluster 1 (Phòng)
       {
-        name: "Công an Quận 1",
+        name: "Phòng Cảnh sát Hình sự",
+        shortName: "PC02",
         clusterId: cluster1.id,
-        description: "Công an Quận 1, TP.HCM",
+        description: "Phòng Cảnh sát Hình sự Công an TP.HCM",
       },
       {
-        name: "Công an Quận 3",
+        name: "Phòng Cảnh sát Giao thông",
+        shortName: "PC08",
         clusterId: cluster1.id,
-        description: "Công an Quận 3, TP.HCM",
+        description: "Phòng Cảnh sát Giao thông Công an TP.HCM",
       },
       {
-        name: "Công an Quận 5",
+        name: "Phòng An ninh Chính trị nội bộ",
+        shortName: "PA03",
         clusterId: cluster1.id,
-        description: "Công an Quận 5, TP.HCM",
+        description: "Phòng An ninh Chính trị nội bộ Công an TP.HCM",
       },
+      // Units for cluster 2 (Xã phường Quận 1)
       {
-        name: "Công an Huyện Củ Chi",
+        name: "Công an Phường Bến Nghé",
+        shortName: "CAPBN",
         clusterId: cluster2.id,
-        description: "Công an Huyện Củ Chi, TP.HCM",
+        description: "Công an Phường Bến Nghé, Quận 1",
       },
       {
-        name: "Công an Huyện Hóc Môn",
+        name: "Công an Phường Bến Thành",
+        shortName: "CAPBT",
         clusterId: cluster2.id,
-        description: "Công an Huyện Hóc Môn, TP.HCM",
+        description: "Công an Phường Bến Thành, Quận 1",
+      },
+      {
+        name: "Công an Phường Cô Giang",
+        shortName: "CAPCG",
+        clusterId: cluster2.id,
+        description: "Công an Phường Cô Giang, Quận 1",
+      },
+      // Units for cluster 3 (Xã phường Quận 3)
+      {
+        name: "Công an Phường Võ Thị Sáu",
+        shortName: "CAPVTS",
+        clusterId: cluster3.id,
+        description: "Công an Phường Võ Thị Sáu, Quận 3",
+      },
+      {
+        name: "Công an Phường 09",
+        shortName: "CAP09Q3",
+        clusterId: cluster3.id,
+        description: "Công an Phường 09, Quận 3",
       },
     ]).returning();
 
@@ -78,9 +110,16 @@ async function seed() {
       {
         username: "cumtruong2",
         password: await bcrypt.hash("123456", 10),
-        fullName: "Cụm trưởng Cụm Huyện",
+        fullName: "Cụm trưởng Cụm Xã phường Q1",
         role: "cluster_leader",
         clusterId: cluster2.id,
+      },
+      {
+        username: "cumtruong3",
+        password: await bcrypt.hash("123456", 10),
+        fullName: "Cụm trưởng Cụm Xã phường Q3",
+        role: "cluster_leader",
+        clusterId: cluster3.id,
       },
       {
         username: "donvi1",
@@ -93,14 +132,22 @@ async function seed() {
       {
         username: "donvi2",
         password: await bcrypt.hash("123456", 10),
-        fullName: "Cán bộ Công an Quận 3",
+        fullName: "Cán bộ PC08",
         role: "user",
         clusterId: cluster1.id,
         unitId: units[1].id,
       },
+      {
+        username: "donvi3",
+        password: await bcrypt.hash("123456", 10),
+        fullName: "Cán bộ Phường Bến Nghé",
+        role: "user",
+        clusterId: cluster2.id,
+        unitId: units[3].id,
+      },
     ]).returning();
 
-    console.log(`✓ Đã tạo ${5} người dùng`);
+    console.log(`✓ Đã tạo ${6} người dùng`);
 
     // Create criteria groups for 2025
     console.log("Tạo Nhóm tiêu chí...");
@@ -240,10 +287,12 @@ async function seed() {
     console.log("\n✅ Hoàn thành seed dữ liệu!");
     console.log("\n📋 Thông tin đăng nhập:");
     console.log("  Admin: admin / admin123");
-    console.log("  Cụm trưởng 1: cumtruong1 / 123456");
-    console.log("  Cụm trưởng 2: cumtruong2 / 123456");
-    console.log("  Đơn vị 1: donvi1 / 123456");
-    console.log("  Đơn vị 2: donvi2 / 123456");
+    console.log("  Cụm trưởng 1 (Phòng): cumtruong1 / 123456");
+    console.log("  Cụm trưởng 2 (XP Q1): cumtruong2 / 123456");
+    console.log("  Cụm trưởng 3 (XP Q3): cumtruong3 / 123456");
+    console.log("  Đơn vị 1 (PC02): donvi1 / 123456");
+    console.log("  Đơn vị 2 (PC08): donvi2 / 123456");
+    console.log("  Đơn vị 3 (Bến Nghé): donvi3 / 123456");
     
   } catch (error) {
     console.error("❌ Lỗi khi seed dữ liệu:", error);

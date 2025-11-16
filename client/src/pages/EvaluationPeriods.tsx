@@ -132,23 +132,12 @@ export default function EvaluationPeriods() {
     }
   }, [availableYears, selectedYear]);
 
-  // Memoize filtered periods by year and role
+  // Memoize filtered periods by year only
+  // NOTE: Periods don't have clusterId - they apply to multiple clusters via evaluationPeriodClusters table
   const filteredPeriods = useMemo(() => {
     if (!periods || periods.length === 0) return [];
-    return periods.filter(p => {
-      if (p.year !== selectedYear) return false;
-      // For unit users, only show periods that match their cluster
-      if (user?.role === 'user' && user.clusterId) {
-        return p.clusterId === user.clusterId;
-      }
-      // For cluster leaders, only show periods in their cluster
-      if (user?.role === 'cluster_leader' && user.clusterId) {
-        return p.clusterId === user.clusterId;
-      }
-      // Admin sees all periods for the selected year
-      return true;
-    });
-  }, [periods, selectedYear, user]);
+    return periods.filter(p => p.year === selectedYear);
+  }, [periods, selectedYear]);
 
   const selectedPeriod = filteredPeriods[0]; // First matching period
 

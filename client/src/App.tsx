@@ -11,7 +11,6 @@ import Dashboard from "@/pages/Dashboard";
 import ScoringPage from "@/pages/ScoringPage";
 import UnitsManagement from "@/pages/UnitsManagement";
 import ClustersManagement from "@/pages/ClustersManagement";
-import CriteriaManagement from "@/pages/CriteriaManagement";
 import CriteriaTreeManagement from "@/pages/CriteriaTreeManagement";
 import CriteriaScoring from "@/pages/CriteriaScoring";
 import UsersManagement from "@/pages/UsersManagement";

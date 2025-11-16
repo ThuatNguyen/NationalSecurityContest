@@ -22,9 +22,9 @@ import type { CriteriaWithChildren, CriteriaResult } from "@shared/schema";
 export default function CriteriaScoringPage() {
   const { toast } = useToast();
   
-  const [selectedUnit, setSelectedUnit] = useState<string>("");
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>("");
   const [selectedClusterId, setSelectedClusterId] = useState<string>("");
+  const [selectedUnit, setSelectedUnit] = useState<string>("");
   const [scoringCriteria, setScoringCriteria] = useState<CriteriaWithChildren | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   
@@ -47,34 +47,56 @@ export default function CriteriaScoringPage() {
     if (user?.unitId && !selectedUnit) {
       setSelectedUnit(user.unitId);
     }
-    if (user?.clusterId && !selectedClusterId) {
-      setSelectedClusterId(user.clusterId);
-    }
-  }, [user, selectedUnit, selectedClusterId]);
+  }, [user, selectedUnit]);
   
-  // Fetch evaluation periods based on cluster
-  const { data: periods = [] } = useQuery({
-    queryKey: ["/api/evaluation-periods", selectedClusterId],
+  // Fetch all evaluation periods (active ones will be at the top)
+  const { data: allPeriods = [] } = useQuery({
+    queryKey: ["/api/evaluation-periods"],
     queryFn: async () => {
-      const params = new URLSearchParams();
-      if (selectedClusterId) {
-        params.append("clusterId", selectedClusterId);
-      }
-      const response = await fetch(`/api/evaluation-periods?${params.toString()}`);
+      const response = await fetch("/api/evaluation-periods");
       if (!response.ok) throw new Error("Failed to fetch periods");
       return response.json();
-    },
-    enabled: !!selectedClusterId
+    }
   });
   
-  // Auto-select first period
+  // Filter to show active periods first
+  const periods = allPeriods.filter((p: any) => p.status === "active").concat(
+    allPeriods.filter((p: any) => p.status !== "active")
+  );
+  
+  // Auto-select first period when periods load
   useEffect(() => {
-    if (periods.length > 0) {
+    if (periods.length > 0 && !selectedPeriodId) {
       setSelectedPeriodId(periods[0].id);
-    } else {
-      setSelectedPeriodId("");
     }
-  }, [periods]);
+  }, [periods, selectedPeriodId]);
+  
+  // Fetch clusters assigned to the selected period
+  const { data: clusters = [] } = useQuery({
+    queryKey: ["/api/evaluation-periods", selectedPeriodId, "clusters"],
+    queryFn: async () => {
+      const response = await fetch(`/api/evaluation-periods/${selectedPeriodId}/clusters`);
+      if (!response.ok) throw new Error("Failed to fetch clusters");
+      return response.json();
+    },
+    enabled: !!selectedPeriodId
+  });
+  
+  // Reset cluster and auto-select when period changes or user cluster is available
+  useEffect(() => {
+    if (clusters.length > 0) {
+      // If user has a cluster assigned, use it; otherwise use first cluster
+      const userCluster = user?.clusterId;
+      const clusterInPeriod = clusters.find((c: any) => c.id === userCluster);
+      if (clusterInPeriod) {
+        setSelectedClusterId(userCluster);
+      } else {
+        setSelectedClusterId(clusters[0].id);
+      }
+    } else {
+      setSelectedClusterId("");
+    }
+  }, [selectedPeriodId, clusters, user]);
   
   // Fetch criteria tree
   const { data: tree = [], isLoading: treeLoading } = useQuery<CriteriaWithChildren[]>({

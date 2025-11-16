@@ -29,52 +29,53 @@ import type { CriteriaWithChildren, InsertCriteria } from "@shared/schema";
 export default function CriteriaManagementPage() {
   const { toast } = useToast();
   
-  const [selectedClusterId, setSelectedClusterId] = useState<string>("");
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>("");
+  const [selectedClusterId, setSelectedClusterId] = useState<string>("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCriteria, setEditingCriteria] = useState<CriteriaWithChildren | null>(null);
   const [parentCriteria, setParentCriteria] = useState<CriteriaWithChildren | null>(null);
   
-  // Fetch clusters for filter dropdown
-  const { data: clusters = [] } = useQuery({
-    queryKey: ["/api/clusters"],
+  // Fetch all evaluation periods (active ones will be at the top)
+  const { data: allPeriods = [] } = useQuery({
+    queryKey: ["/api/evaluation-periods"],
     queryFn: async () => {
-      const response = await fetch("/api/clusters");
-      if (!response.ok) throw new Error("Failed to fetch clusters");
-      return response.json();
-    }
-  });
-  
-  // Fetch evaluation periods based on selected cluster
-  const { data: periods = [] } = useQuery({
-    queryKey: ["/api/evaluation-periods", selectedClusterId],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (selectedClusterId) {
-        params.append("clusterId", selectedClusterId);
-      }
-      const response = await fetch(`/api/evaluation-periods?${params.toString()}`);
+      const response = await fetch("/api/evaluation-periods");
       if (!response.ok) throw new Error("Failed to fetch periods");
       return response.json();
-    },
-    enabled: !!selectedClusterId
+    }
   });
   
-  // Set first cluster as default when clusters load
-  useEffect(() => {
-    if (clusters.length > 0 && !selectedClusterId) {
-      setSelectedClusterId(clusters[0].id);
-    }
-  }, [clusters, selectedClusterId]);
+  // Filter to show active periods first
+  const periods = allPeriods.filter((p: any) => p.status === "active").concat(
+    allPeriods.filter((p: any) => p.status !== "active")
+  );
   
-  // Set first period as default when periods load or cluster changes
+  // Fetch clusters assigned to the selected period
+  const { data: clusters = [] } = useQuery({
+    queryKey: ["/api/evaluation-periods", selectedPeriodId, "clusters"],
+    queryFn: async () => {
+      const response = await fetch(`/api/evaluation-periods/${selectedPeriodId}/clusters`);
+      if (!response.ok) throw new Error("Failed to fetch clusters");
+      return response.json();
+    },
+    enabled: !!selectedPeriodId
+  });
+  
+  // Auto-select first period when periods load
   useEffect(() => {
-    if (periods.length > 0) {
+    if (periods.length > 0 && !selectedPeriodId) {
       setSelectedPeriodId(periods[0].id);
-    } else {
-      setSelectedPeriodId("");
     }
-  }, [periods]);
+  }, [periods, selectedPeriodId]);
+  
+  // Reset cluster and auto-select first cluster when period changes or clusters load
+  useEffect(() => {
+    if (clusters.length > 0) {
+      setSelectedClusterId(clusters[0].id);
+    } else {
+      setSelectedClusterId("");
+    }
+  }, [selectedPeriodId, clusters]);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -304,6 +305,22 @@ export default function CriteriaManagementPage() {
           {/* Filters */}
           <div className="flex gap-4 mb-6">
             <div className="w-64">
+              <Label>Kỳ thi đua</Label>
+              <Select value={selectedPeriodId} onValueChange={setSelectedPeriodId} data-testid="select-period">
+                <SelectTrigger>
+                  <SelectValue placeholder="Chọn kỳ thi đua..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {periods.map((period: any) => (
+                    <SelectItem key={period.id} value={period.id}>
+                      {period.name} {period.status === "active" && "✓"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="w-64">
               <Label>Cụm thi đua</Label>
               <Select value={selectedClusterId} onValueChange={setSelectedClusterId} data-testid="select-cluster">
                 <SelectTrigger>
@@ -313,22 +330,6 @@ export default function CriteriaManagementPage() {
                   {clusters.map((cluster: any) => (
                     <SelectItem key={cluster.id} value={cluster.id}>
                       {cluster.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="w-64">
-              <Label>Kỳ thi đua</Label>
-              <Select value={selectedPeriodId} onValueChange={setSelectedPeriodId} data-testid="select-period">
-                <SelectTrigger>
-                  <SelectValue placeholder="Chọn kỳ thi đua..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {periods.map((period: any) => (
-                    <SelectItem key={period.id} value={period.id}>
-                      {period.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

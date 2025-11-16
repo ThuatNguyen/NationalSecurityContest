@@ -26,6 +26,8 @@ import { useToast } from "@/hooks/use-toast";
 interface Criteria {
   id: string;
   name: string;
+  code: string;
+  level: number;
   maxScore: number;
   displayOrder: number;
   selfScore?: number;
@@ -73,15 +75,18 @@ export default function EvaluationPeriods() {
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [selectedCriteria, setSelectedCriteria] = useState<Criteria | null>(null);
   const [reviewType, setReviewType] = useState<"review1" | "review2">("review1");
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>('');
   const [selectedClusterId, setSelectedClusterId] = useState<string>('');
   const [selectedUnitId, setSelectedUnitId] = useState<string>('');
   const [submitDialogOpen, setSubmitDialogOpen] = useState(false);
 
-  // Query evaluation periods
+  // Query all evaluation periods
   const { 
     data: periods = [],
-    isLoading: loadingPeriods 
+    isLoading: loadingPeriods,
+    error: periodsError,
+    refetch: refetchPeriods 
   } = useQuery<any[]>({
     queryKey: ['/api/evaluation-periods'],
     enabled: !!user,
@@ -89,7 +94,7 @@ export default function EvaluationPeriods() {
 
   // Query clusters for selected period
   const { 
-    data: periodClusters = [], 
+    data: clusters = [], 
     isLoading: loadingClusters 
   } = useQuery<any[]>({
     queryKey: [`/api/evaluation-periods/${selectedPeriodId}/clusters`],
@@ -110,32 +115,6 @@ export default function EvaluationPeriods() {
       return res.json();
     },
     enabled: !!selectedClusterId,
-  });
-
-  // Auto-select for unit users
-  useEffect(() => {
-    if (user?.role === 'user' && user.unitId) {
-      setSelectedUnitId(user.unitId);
-      // Get unit to find cluster
-      fetch(`/api/units/${user.unitId}`, { credentials: 'include' })
-        .then(res => res.json())
-        .then(unit => {
-          setSelectedClusterId(unit.clusterId);
-        });
-    } else if (user?.role === 'cluster_leader' && user.clusterId) {
-      setSelectedClusterId(user.clusterId);
-    }
-  }, [user]);
-
-  // Query evaluation periods (renamed from old variable)
-  const { 
-    data: oldPeriods, 
-    isLoading: loadingPeriods, 
-    error: periodsError,
-    refetch: refetchPeriods 
-  } = useQuery<any[]>({
-    queryKey: ['/api/evaluation-periods'],
-    enabled: !!user,
   });
 
   // Memoize filtered units by selected cluster

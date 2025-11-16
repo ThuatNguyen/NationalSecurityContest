@@ -111,12 +111,12 @@ export default function CriteriaScoringPage() {
       if (!response.ok) throw new Error("Failed to fetch criteria tree");
       return response.json();
     },
-    enabled: !!selectedUnit && !!selectedPeriodId
+    enabled: !!selectedUnit && !!selectedPeriodId && !!selectedClusterId
   });
   
   // Fetch results
   const { data: results = [], isLoading: resultsLoading } = useQuery<CriteriaResult[]>({
-    queryKey: ["/api/criteria-results", selectedUnit, selectedPeriodId],
+    queryKey: ["/api/criteria-results", selectedUnit, selectedPeriodId, selectedClusterId],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.append("unitId", selectedUnit);
@@ -125,7 +125,7 @@ export default function CriteriaScoringPage() {
       if (!response.ok) throw new Error("Failed to fetch results");
       return response.json();
     },
-    enabled: !!selectedUnit && !!selectedPeriodId
+    enabled: !!selectedUnit && !!selectedPeriodId && !!selectedClusterId
   });
   
   // Fetch summary
@@ -134,7 +134,7 @@ export default function CriteriaScoringPage() {
     byType: { [key: number]: number };
     details: Array<{ criteriaId: string; criteriaName: string; score: number }>;
   }>({
-    queryKey: ["/api/criteria-results/summary", selectedUnit, selectedPeriodId],
+    queryKey: ["/api/criteria-results/summary", selectedUnit, selectedPeriodId, selectedClusterId],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.append("unitId", selectedUnit);
@@ -143,7 +143,7 @@ export default function CriteriaScoringPage() {
       if (!response.ok) throw new Error("Failed to fetch summary");
       return response.json();
     },
-    enabled: !!selectedUnit && !!selectedPeriodId
+    enabled: !!selectedUnit && !!selectedPeriodId && !!selectedClusterId
   });
   
   // Input result mutation
@@ -293,37 +293,46 @@ export default function CriteriaScoringPage() {
           <CardTitle>Chấm điểm tiêu chí thi đua</CardTitle>
         </CardHeader>
         <CardContent>
-          {/* Summary */}
-          {summary && (
-            <div className="mb-6">
-              <CriteriaScoreSummary tree={tree} scores={scoresMap} />
+          {/* Show message if no valid period/cluster */}
+          {!selectedPeriodId || !selectedClusterId ? (
+            <div className="text-center py-12 text-muted-foreground">
+              {!selectedPeriodId ? "Chưa có kỳ thi đua nào được kích hoạt" : "Đơn vị của bạn chưa được gán vào kỳ thi đua này"}
             </div>
-          )}
-          
-          {/* Tree with scoring */}
-          {treeLoading || resultsLoading ? (
-            <div className="text-center py-12">Đang tải...</div>
           ) : (
-            <div className="space-y-4">
-              <CriteriaTreeView
-                tree={tree}
-                onScore={openScoringDialog}
-                isEditable={false}
-                scores={scoresMap}
-                emptyMessage="Chưa có tiêu chí nào cho năm này"
-              />
+            <>
+              {/* Summary */}
+              {summary && (
+                <div className="mb-6">
+                  <CriteriaScoreSummary tree={tree} scores={scoresMap} />
+                </div>
+              )}
               
-              {/* Clickable scoring */}
-              <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-                <h3 className="font-semibold mb-2">Hướng dẫn:</h3>
-                <ul className="text-sm space-y-1 text-muted-foreground">
-                  <li>• Click vào tiêu chí để nhập kết quả chấm điểm</li>
-                  <li>• Chỉ có thể chấm điểm cho tiêu chí lá (không có tiêu chí con)</li>
-                  <li>• Nhập dữ liệu và click "Tính điểm tự động" để hệ thống tính toán</li>
-                  <li>• Tổng điểm = tổng điểm của các tiêu chí lá</li>
-                </ul>
-              </div>
-            </div>
+              {/* Tree with scoring */}
+              {treeLoading || resultsLoading ? (
+                <div className="text-center py-12">Đang tải...</div>
+              ) : (
+                <div className="space-y-4">
+                  <CriteriaTreeView
+                    tree={tree}
+                    onScore={openScoringDialog}
+                    isEditable={false}
+                    scores={scoresMap}
+                    emptyMessage="Chưa có tiêu chí nào cho kỳ thi đua này"
+                  />
+                  
+                  {/* Clickable scoring */}
+                  <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+                    <h3 className="font-semibold mb-2">Hướng dẫn:</h3>
+                    <ul className="text-sm space-y-1 text-muted-foreground">
+                      <li>• Click vào tiêu chí để nhập kết quả chấm điểm</li>
+                      <li>• Chỉ có thể chấm điểm cho tiêu chí lá (không có tiêu chí con)</li>
+                      <li>• Nhập dữ liệu và click "Tính điểm tự động" để hệ thống tính toán</li>
+                      <li>• Tổng điểm = tổng điểm của các tiêu chí lá</li>
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

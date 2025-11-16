@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, decimal, timestamp, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, decimal, timestamp, unique, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -81,17 +81,17 @@ export const criteria = pgTable("criteria", {
   
   orderIndex: integer("order_index").notNull().default(0),
   
-  // Áp dụng theo năm và cụm
-  year: integer("year").notNull(), // Năm áp dụng (VD: 2025)
-  clusterId: varchar("cluster_id").notNull().references(() => clusters.id, { onDelete: "cascade" }), // Mỗi cụm có bộ tiêu chí riêng
-  
-  // Gắn với kỳ thi đua cụ thể (optional - nếu null thì áp dụng cho tất cả kỳ trong năm)
-  periodId: varchar("period_id").references(() => evaluationPeriods.id, { onDelete: "cascade" }),
+  // Áp dụng theo kỳ thi đua và cụm (required)
+  periodId: varchar("period_id").notNull().references(() => evaluationPeriods.id, { onDelete: "cascade" }),
+  clusterId: varchar("cluster_id").notNull().references(() => clusters.id, { onDelete: "cascade" }),
   
   isActive: integer("is_active").notNull().default(1), // 1=active, 0=inactive
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  // Composite index for efficient filtering
+  periodClusterIdx: index("criteria_period_cluster_idx").on(table.periodId, table.clusterId, table.parentId, table.orderIndex),
+}));
 
 // Criteria Formula - Chi tiết cho tiêu chí định lượng
 export const criteriaFormula = pgTable("criteria_formula", {
@@ -130,13 +130,13 @@ export const criteriaTargets = pgTable("criteria_targets", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   criteriaId: varchar("criteria_id").notNull().references(() => criteria.id, { onDelete: "cascade" }),
   unitId: varchar("unit_id").notNull().references(() => units.id, { onDelete: "cascade" }),
-  year: integer("year").notNull(),
+  periodId: varchar("period_id").notNull().references(() => evaluationPeriods.id, { onDelete: "cascade" }),
   targetValue: decimal("target_value", { precision: 10, scale: 2 }).notNull(),
   note: text("note"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
-  uniqueTargetPerUnit: unique().on(table.criteriaId, table.unitId, table.year),
+  uniqueTargetPerUnit: unique().on(table.criteriaId, table.unitId, table.periodId),
 }));
 
 // Criteria Results - Lưu kết quả chấm điểm
@@ -144,8 +144,7 @@ export const criteriaResults = pgTable("criteria_results", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   criteriaId: varchar("criteria_id").notNull().references(() => criteria.id, { onDelete: "cascade" }),
   unitId: varchar("unit_id").notNull().references(() => units.id, { onDelete: "cascade" }),
-  year: integer("year").notNull(),
-  periodId: varchar("period_id").references(() => evaluationPeriods.id, { onDelete: "cascade" }),
+  periodId: varchar("period_id").notNull().references(() => evaluationPeriods.id, { onDelete: "cascade" }),
   
   // Dữ liệu nhập vào
   actualValue: decimal("actual_value", { precision: 10, scale: 2 }), // Giá trị thực tế (cho định lượng)
@@ -166,7 +165,7 @@ export const criteriaResults = pgTable("criteria_results", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
-  uniqueResultPerUnit: unique().on(table.criteriaId, table.unitId, table.year),
+  uniqueResultPerUnit: unique().on(table.criteriaId, table.unitId, table.periodId),
 }));
 
 // Insert schemas for new tables

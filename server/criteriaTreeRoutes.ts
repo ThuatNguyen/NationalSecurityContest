@@ -32,14 +32,18 @@ export function setupCriteriaTreeRoutes(app: Express) {
   
   /**
    * GET /api/criteria/tree
-   * Lấy cây tiêu chí đầy đủ
+   * Lấy cây tiêu chí đầy đủ theo periodId và clusterId
    */
   app.get("/api/criteria/tree", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const year = parseInt(req.query.year as string) || new Date().getFullYear();
+      const periodId = req.query.periodId as string;
       const clusterId = req.query.clusterId as string | undefined;
       
-      const tree = await criteriaTreeStorage.getCriteriaTree(year, clusterId);
+      if (!periodId) {
+        return res.status(400).json({ message: "Thiếu periodId" });
+      }
+      
+      const tree = await criteriaTreeStorage.getCriteriaTree(periodId, clusterId);
       res.json(tree);
     } catch (error) {
       next(error);
@@ -183,18 +187,21 @@ export function setupCriteriaTreeRoutes(app: Express) {
   
   /**
    * GET /api/criteria-targets
-   * Lấy danh sách chỉ tiêu của đơn vị
+   * Lấy danh sách chỉ tiêu của đơn vị theo periodId
    */
   app.get("/api/criteria-targets", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const unitId = req.query.unitId as string;
-      const year = parseInt(req.query.year as string) || new Date().getFullYear();
+      const periodId = req.query.periodId as string;
       
       if (!unitId) {
         return res.status(400).json({ message: "Thiếu unitId" });
       }
+      if (!periodId) {
+        return res.status(400).json({ message: "Thiếu periodId" });
+      }
       
-      const targets = await criteriaTreeStorage.getCriteriaTargets(unitId, year);
+      const targets = await criteriaTreeStorage.getCriteriaTargets(unitId, periodId);
       res.json(targets);
     } catch (error) {
       next(error);
@@ -228,17 +235,17 @@ export function setupCriteriaTreeRoutes(app: Express) {
   
   /**
    * POST /api/criteria-results/calc
-   * Tính điểm tự động cho một tiêu chí
+   * Tính điểm tự động cho một tiêu chí theo periodId
    */
   app.post("/api/criteria-results/calc", requireRole("user", "cluster_leader", "admin"), async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { criteriaId, unitId, year } = req.body;
+      const { criteriaId, unitId, periodId } = req.body;
       
-      if (!criteriaId || !unitId || !year) {
-        return res.status(400).json({ message: "Thiếu criteriaId, unitId hoặc year" });
+      if (!criteriaId || !unitId || !periodId) {
+        return res.status(400).json({ message: "Thiếu criteriaId, unitId hoặc periodId" });
       }
       
-      const score = await criteriaTreeStorage.calculateCriteriaScore(criteriaId, unitId, year);
+      const score = await criteriaTreeStorage.calculateCriteriaScore(criteriaId, unitId, periodId);
       res.json({ score });
     } catch (error: any) {
       if (error.message.includes("không tồn tại") || error.message.includes("Chưa có")) {
@@ -250,18 +257,21 @@ export function setupCriteriaTreeRoutes(app: Express) {
   
   /**
    * GET /api/criteria-results/summary
-   * Lấy tổng hợp điểm của đơn vị
+   * Lấy tổng hợp điểm của đơn vị theo periodId
    */
   app.get("/api/criteria-results/summary", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const unitId = req.query.unitId as string;
-      const year = parseInt(req.query.year as string) || new Date().getFullYear();
+      const periodId = req.query.periodId as string;
       
       if (!unitId) {
         return res.status(400).json({ message: "Thiếu unitId" });
       }
+      if (!periodId) {
+        return res.status(400).json({ message: "Thiếu periodId" });
+      }
       
-      const summary = await criteriaTreeStorage.calculateUnitTotalScore(unitId, year);
+      const summary = await criteriaTreeStorage.calculateUnitTotalScore(unitId, periodId);
       res.json(summary);
     } catch (error) {
       next(error);
@@ -270,18 +280,21 @@ export function setupCriteriaTreeRoutes(app: Express) {
   
   /**
    * GET /api/criteria-results
-   * Lấy kết quả chấm điểm của đơn vị
+   * Lấy kết quả chấm điểm của đơn vị theo periodId
    */
   app.get("/api/criteria-results", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const unitId = req.query.unitId as string;
-      const year = parseInt(req.query.year as string) || new Date().getFullYear();
+      const periodId = req.query.periodId as string;
       
       if (!unitId) {
         return res.status(400).json({ message: "Thiếu unitId" });
       }
+      if (!periodId) {
+        return res.status(400).json({ message: "Thiếu periodId" });
+      }
       
-      const results = await criteriaTreeStorage.getCriteriaResults(unitId, year);
+      const results = await criteriaTreeStorage.getCriteriaResults(unitId, periodId);
       res.json(results);
     } catch (error) {
       next(error);

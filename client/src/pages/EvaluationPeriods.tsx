@@ -53,7 +53,6 @@ interface EvaluationSummary {
     id: string;
     name: string;
     year: number;
-    clusterId: string;
     startDate: string;
     endDate: string;
     status: string;

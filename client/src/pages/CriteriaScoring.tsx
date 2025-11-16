@@ -21,10 +21,10 @@ import type { CriteriaWithChildren, CriteriaResult } from "@shared/schema";
 
 export default function CriteriaScoringPage() {
   const { toast } = useToast();
-  const currentYear = new Date().getFullYear();
   
-  const [year, setYear] = useState(currentYear);
   const [selectedUnit, setSelectedUnit] = useState<string>("");
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string>("");
+  const [selectedClusterId, setSelectedClusterId] = useState<string>("");
   const [scoringCriteria, setScoringCriteria] = useState<CriteriaWithChildren | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   
@@ -42,23 +42,68 @@ export default function CriteriaScoringPage() {
     queryKey: ["/api/auth/me"],
   });
   
-  // Set default unit from user
+  // Set defaults from user
   useEffect(() => {
     if (user?.unitId && !selectedUnit) {
       setSelectedUnit(user.unitId);
     }
-  }, [user, selectedUnit]);
+    if (user?.clusterId && !selectedClusterId) {
+      setSelectedClusterId(user.clusterId);
+    }
+  }, [user, selectedUnit, selectedClusterId]);
+  
+  // Fetch evaluation periods based on cluster
+  const { data: periods = [] } = useQuery({
+    queryKey: ["/api/evaluation-periods", selectedClusterId],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (selectedClusterId) {
+        params.append("clusterId", selectedClusterId);
+      }
+      const response = await fetch(`/api/evaluation-periods?${params.toString()}`);
+      if (!response.ok) throw new Error("Failed to fetch periods");
+      return response.json();
+    },
+    enabled: !!selectedClusterId
+  });
+  
+  // Auto-select first period
+  useEffect(() => {
+    if (periods.length > 0) {
+      setSelectedPeriodId(periods[0].id);
+    } else {
+      setSelectedPeriodId("");
+    }
+  }, [periods]);
   
   // Fetch criteria tree
   const { data: tree = [], isLoading: treeLoading } = useQuery<CriteriaWithChildren[]>({
-    queryKey: ["/api/criteria/tree", { year }],
-    enabled: !!selectedUnit
+    queryKey: ["/api/criteria/tree", selectedPeriodId, selectedClusterId],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.append("periodId", selectedPeriodId);
+      if (selectedClusterId) {
+        params.append("clusterId", selectedClusterId);
+      }
+      const response = await fetch(`/api/criteria/tree?${params.toString()}`);
+      if (!response.ok) throw new Error("Failed to fetch criteria tree");
+      return response.json();
+    },
+    enabled: !!selectedUnit && !!selectedPeriodId
   });
   
   // Fetch results
   const { data: results = [], isLoading: resultsLoading } = useQuery<CriteriaResult[]>({
-    queryKey: ["/api/criteria-results", { unitId: selectedUnit, year }],
-    enabled: !!selectedUnit
+    queryKey: ["/api/criteria-results", selectedUnit, selectedPeriodId],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.append("unitId", selectedUnit);
+      params.append("periodId", selectedPeriodId);
+      const response = await fetch(`/api/criteria-results?${params.toString()}`);
+      if (!response.ok) throw new Error("Failed to fetch results");
+      return response.json();
+    },
+    enabled: !!selectedUnit && !!selectedPeriodId
   });
   
   // Fetch summary
@@ -67,8 +112,16 @@ export default function CriteriaScoringPage() {
     byType: { [key: number]: number };
     details: Array<{ criteriaId: string; criteriaName: string; score: number }>;
   }>({
-    queryKey: ["/api/criteria-results/summary", { unitId: selectedUnit, year }],
-    enabled: !!selectedUnit
+    queryKey: ["/api/criteria-results/summary", selectedUnit, selectedPeriodId],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.append("unitId", selectedUnit);
+      params.append("periodId", selectedPeriodId);
+      const response = await fetch(`/api/criteria-results/summary?${params.toString()}`);
+      if (!response.ok) throw new Error("Failed to fetch summary");
+      return response.json();
+    },
+    enabled: !!selectedUnit && !!selectedPeriodId
   });
   
   // Input result mutation
@@ -93,7 +146,7 @@ export default function CriteriaScoringPage() {
   
   // Calculate mutation
   const calculateMutation = useMutation({
-    mutationFn: async (data: { criteriaId: string; unitId: string; year: number }) => {
+    mutationFn: async (data: { criteriaId: string; unitId: string; periodId: string }) => {
       return await apiRequest("POST", "/api/criteria-results/calc", data);
     },
     onSuccess: () => {
@@ -157,7 +210,7 @@ export default function CriteriaScoringPage() {
     const data: any = {
       criteriaId: scoringCriteria.id,
       unitId: selectedUnit,
-      year: year,
+      periodId: selectedPeriodId,
       status: "draft",
       note: scoringData.note
     };
@@ -187,7 +240,7 @@ export default function CriteriaScoringPage() {
     calculateMutation.mutate({
       criteriaId: scoringCriteria.id,
       unitId: selectedUnit,
-      year: year
+      periodId: selectedPeriodId
     });
   };
   

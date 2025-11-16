@@ -28,10 +28,9 @@ import type { CriteriaWithChildren, InsertCriteria } from "@shared/schema";
 
 export default function CriteriaManagementPage() {
   const { toast } = useToast();
-  const currentYear = new Date().getFullYear();
   
-  const [year, setYear] = useState(currentYear);
   const [selectedClusterId, setSelectedClusterId] = useState<string>("");
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string>("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCriteria, setEditingCriteria] = useState<CriteriaWithChildren | null>(null);
   const [parentCriteria, setParentCriteria] = useState<CriteriaWithChildren | null>(null);
@@ -46,12 +45,36 @@ export default function CriteriaManagementPage() {
     }
   });
   
+  // Fetch evaluation periods based on selected cluster
+  const { data: periods = [] } = useQuery({
+    queryKey: ["/api/evaluation-periods", selectedClusterId],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (selectedClusterId) {
+        params.append("clusterId", selectedClusterId);
+      }
+      const response = await fetch(`/api/evaluation-periods?${params.toString()}`);
+      if (!response.ok) throw new Error("Failed to fetch periods");
+      return response.json();
+    },
+    enabled: !!selectedClusterId
+  });
+  
   // Set first cluster as default when clusters load
   useEffect(() => {
     if (clusters.length > 0 && !selectedClusterId) {
       setSelectedClusterId(clusters[0].id);
     }
   }, [clusters, selectedClusterId]);
+  
+  // Set first period as default when periods load or cluster changes
+  useEffect(() => {
+    if (periods.length > 0) {
+      setSelectedPeriodId(periods[0].id);
+    } else {
+      setSelectedPeriodId("");
+    }
+  }, [periods]);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -78,10 +101,10 @@ export default function CriteriaManagementPage() {
   
   // Fetch criteria tree
   const { data: tree = [], isLoading, refetch } = useQuery<CriteriaWithChildren[]>({
-    queryKey: ["/api/criteria/tree", year, selectedClusterId],
+    queryKey: ["/api/criteria/tree", selectedPeriodId, selectedClusterId],
     queryFn: async () => {
       const params = new URLSearchParams();
-      params.append("year", year.toString());
+      params.append("periodId", selectedPeriodId);
       if (selectedClusterId) {
         params.append("clusterId", selectedClusterId);
       }
@@ -89,7 +112,7 @@ export default function CriteriaManagementPage() {
       if (!response.ok) throw new Error("Failed to fetch criteria tree");
       return response.json();
     },
-    enabled: !!selectedClusterId // Only fetch when cluster is selected
+    enabled: !!selectedClusterId && !!selectedPeriodId // Only fetch when both cluster and period are selected
   });
   
   // Create mutation
@@ -219,8 +242,8 @@ export default function CriteriaManagementPage() {
       criteriaType: formData.isLeaf ? formData.criteriaType : 0, // 0 means parent node, no scoring
       formulaType: (formData.isLeaf && formData.criteriaType === 1) ? formData.formulaType : undefined,
       orderIndex: formData.orderIndex,
-      year: year,
-      clusterId: formData.clusterId || null,
+      periodId: selectedPeriodId,
+      clusterId: formData.clusterId || selectedClusterId,
       isActive: 1
     };
     
@@ -280,23 +303,9 @@ export default function CriteriaManagementPage() {
         <CardContent>
           {/* Filters */}
           <div className="flex gap-4 mb-6">
-            <div className="w-48">
-              <Label>Năm</Label>
-              <Select value={year.toString()} onValueChange={(v) => setYear(parseInt(v))}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {[currentYear - 1, currentYear, currentYear + 1].map(y => (
-                    <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
             <div className="w-64">
               <Label>Cụm thi đua</Label>
-              <Select value={selectedClusterId} onValueChange={setSelectedClusterId}>
+              <Select value={selectedClusterId} onValueChange={setSelectedClusterId} data-testid="select-cluster">
                 <SelectTrigger>
                   <SelectValue placeholder="Chọn cụm..." />
                 </SelectTrigger>
@@ -304,6 +313,22 @@ export default function CriteriaManagementPage() {
                   {clusters.map((cluster: any) => (
                     <SelectItem key={cluster.id} value={cluster.id}>
                       {cluster.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="w-64">
+              <Label>Kỳ thi đua</Label>
+              <Select value={selectedPeriodId} onValueChange={setSelectedPeriodId} data-testid="select-period">
+                <SelectTrigger>
+                  <SelectValue placeholder="Chọn kỳ thi đua..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {periods.map((period: any) => (
+                    <SelectItem key={period.id} value={period.id}>
+                      {period.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -1,9 +1,0 @@
-                  id                  |                  name                   | year |              cluster_id              | period_id 
---------------------------------------+-----------------------------------------+------+--------------------------------------+-----------
- df5261a1-721f-4db1-8971-0001d6d7c605 | I. KẾT QUẢ CÔNG TÁC CHUYÊN MÔN          | 2025 | 524a16ed-00ff-458e-bc65-089116274fa5 | 
- fe9a6e22-39f3-41b5-b336-3c6bba26d981 | Tỷ lệ giải quyết hồ sơ đúng hạn         | 2025 | 524a16ed-00ff-458e-bc65-089116274fa5 | 
- 57cd90fc-a8b7-4050-8a36-a9e2a6d9eae4 | Số lượng vụ án đã giải quyết            | 2025 | 524a16ed-00ff-458e-bc65-089116274fa5 | 
- 394ad5c8-04de-468c-b201-33ab8186f9f8 | Hoàn thành tốt công tác báo cáo định kỳ | 2025 | 524a16ed-00ff-458e-bc65-089116274fa5 | 
- b04f26b3-8ec7-4664-9f7f-f837e93bbcbe | II. CÔNG TÁC QUẢN LÝ VÀ ĐÀO TẠO         | 2025 | 524a16ed-00ff-458e-bc65-089116274fa5 | 
-(5 rows)
-

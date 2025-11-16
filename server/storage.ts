@@ -783,9 +783,9 @@ export class DatabaseStorage implements IStorage {
     // Get evaluation (or return null if not exists yet)
     const evaluation = await this.getEvaluationByPeriodUnit(periodId, unitId) || null;
 
-    // Get criteria tree for this period's year and UNIT'S cluster, filtered by periodId
+    // Get criteria tree for this period and UNIT'S cluster
     const criteriaTreeStorage = (await import('./criteriaTreeStorage')).criteriaTreeStorage;
-    const criteriaTree = await criteriaTreeStorage.getCriteriaTree(period.year, unit.clusterId, periodId);
+    const criteriaTree = await criteriaTreeStorage.getCriteriaTree(periodId, unit.clusterId);
 
     // Get all scores for this evaluation
     const scores = evaluation ? await this.getScores(evaluation.id) : [];

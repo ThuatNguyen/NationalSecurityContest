@@ -5,6 +5,30 @@ This web application digitizes and streamlines the evaluation process for the Vi
 
 ## Recent Changes
 
+### 2025-11-16: Migrated Criteria System from Year-Based to Period-Based Filtering
+- **Problem**: Criteria management used year-based filtering, but business requirement is one year can have multiple evaluation periods with different criteria sets per cluster. Year-based approach was inadequate.
+- **Root Cause**: 
+  - Schema had `year` column in `criteria`, `criteriaTargets`, and `criteriaResults` tables
+  - Backend storage and API routes filtered by year parameter
+  - Frontend pages (CriteriaTreeManagement, CriteriaScoring, CriteriaManagement) used year dropdowns
+  - No way to distinguish between different periods within same year
+- **Solution**:
+  - **Schema Migration**: Dropped `year` column, made `periodId` NOT NULL with composite indexes `(periodId, clusterId, ...)`
+  - **Backend Refactor**: Updated `CriteriaTreeStorage.getCriteria(periodId, clusterId?)` signature and all API endpoints to require `periodId` parameter
+  - **Frontend Refactor**: 
+    - Added period dropdown to all criteria management pages
+    - Replaced year state with selectedPeriodId
+    - Auto-fetch periods based on selected cluster
+    - Auto-select first available period
+    - Updated all queries and mutations to use periodId instead of year
+  - **Data Migration**: Assigned existing criteria without periodId to first evaluation period of their cluster via SQL
+- **Technical Details**:
+  - Files changed: `shared/schema.ts`, `server/criteriaTreeStorage.ts`, `server/criteriaTreeRoutes.ts`, `client/src/pages/CriteriaTreeManagement.tsx`, `client/src/pages/CriteriaScoring.tsx`, `client/src/pages/CriteriaManagement.tsx`
+  - Migration approach: Manual SQL execution to avoid interactive prompts
+  - LSP errors resolved: Fixed clusterId type checking, removed year variable references
+  - All pages now have consistent (Cluster → Period) filter pattern
+- **Impact**: System now supports multiple evaluation periods per year with cluster-specific criteria, enabling flexible period-based evaluation cycles
+
 ### 2025-11-16: Refactored Period Filter from Year-Based to Period Name-Based
 - **Problem**: User requirement - one year can have multiple evaluation periods for multiple clusters, each with different criteria. Year-based filtering was ambiguous.
 - **Root Cause**: 

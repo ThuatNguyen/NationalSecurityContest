@@ -18,7 +18,7 @@ import type { Cluster, CriteriaGroup, Criteria } from "@shared/schema";
 export default function CriteriaManagement() {
   const { user } = useSession();
   const { toast } = useToast();
-  const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string>("");
   const [selectedClusterId, setSelectedClusterId] = useState<string>("");
   const [searchTerm, setSearchTerm] = useState<string>("");
   
@@ -56,11 +56,37 @@ export default function CriteriaManagement() {
     queryKey: ["/api/clusters"],
   });
 
-  const { data: criteriaGroups, isLoading: groupsLoading } = useQuery<CriteriaGroup[]>({
-    queryKey: ["/api/criteria-groups", selectedClusterId, selectedYear],
-    enabled: !!selectedClusterId && !!selectedYear,
+  // Fetch evaluation periods based on cluster
+  const { data: periods = [] } = useQuery({
+    queryKey: ["/api/evaluation-periods", selectedClusterId],
     queryFn: async () => {
-      const res = await fetch(`/api/criteria-groups?clusterId=${selectedClusterId}&year=${selectedYear}`, {
+      const params = new URLSearchParams();
+      if (selectedClusterId) {
+        params.append("clusterId", selectedClusterId);
+      }
+      const response = await fetch(`/api/evaluation-periods?${params.toString()}`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch periods");
+      return response.json();
+    },
+    enabled: !!selectedClusterId
+  });
+  
+  // Auto-select first period
+  useEffect(() => {
+    if (periods.length > 0) {
+      setSelectedPeriodId(periods[0].id);
+    } else {
+      setSelectedPeriodId("");
+    }
+  }, [periods]);
+
+  const { data: criteriaGroups, isLoading: groupsLoading } = useQuery<CriteriaGroup[]>({
+    queryKey: ["/api/criteria-groups", selectedClusterId, selectedPeriodId],
+    enabled: !!selectedClusterId && !!selectedPeriodId,
+    queryFn: async () => {
+      const res = await fetch(`/api/criteria-groups?clusterId=${selectedClusterId}&periodId=${selectedPeriodId}`, {
         credentials: "include",
       });
       if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
@@ -218,7 +244,7 @@ export default function CriteriaManagement() {
     const submitData = {
       name: groupFormData.name,
       displayOrder: groupFormData.displayOrder,
-      year: parseInt(selectedYear),
+      periodId: selectedPeriodId,
       clusterId: selectedClusterId,
     };
 
@@ -349,21 +375,6 @@ export default function CriteriaManagement() {
           )}
           <div className="flex flex-wrap gap-4">
             <div className="flex-1 min-w-[200px]">
-              <Label htmlFor="filter-year-criteria" className="text-xs font-semibold uppercase tracking-wide mb-2 block">
-                Năm áp dụng
-              </Label>
-              <Select value={selectedYear} onValueChange={setSelectedYear}>
-                <SelectTrigger id="filter-year-criteria" data-testid="select-year-criteria">
-                  <SelectValue placeholder="Chọn năm" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="2025">2025</SelectItem>
-                  <SelectItem value="2024">2024</SelectItem>
-                  <SelectItem value="2023">2023</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex-1 min-w-[200px]">
               <Label htmlFor="filter-cluster-criteria" className="text-xs font-semibold uppercase tracking-wide mb-2 block">
                 Cụm thi đua {user?.role === "cluster_leader" && "(Cụm của bạn)"}
               </Label>
@@ -379,6 +390,23 @@ export default function CriteriaManagement() {
                   {clusters?.map((cluster) => (
                     <SelectItem key={cluster.id} value={cluster.id}>
                       {cluster.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex-1 min-w-[200px]">
+              <Label htmlFor="filter-period-criteria" className="text-xs font-semibold uppercase tracking-wide mb-2 block">
+                Kỳ thi đua
+              </Label>
+              <Select value={selectedPeriodId} onValueChange={setSelectedPeriodId}>
+                <SelectTrigger id="filter-period-criteria" data-testid="select-period-criteria">
+                  <SelectValue placeholder="Chọn kỳ thi đua" />
+                </SelectTrigger>
+                <SelectContent>
+                  {periods.map((period: any) => (
+                    <SelectItem key={period.id} value={period.id}>
+                      {period.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

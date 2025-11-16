@@ -15,8 +15,10 @@ import CriteriaManagement from "@/pages/CriteriaManagement";
 import CriteriaTreeManagement from "@/pages/CriteriaTreeManagement";
 import CriteriaScoring from "@/pages/CriteriaScoring";
 import UsersManagement from "@/pages/UsersManagement";
-import EvaluationPeriods from "@/pages/EvaluationPeriods";
+import EvaluationPeriods from "@/pages/EvaluationPeriodsNew";
 import Reports from "@/pages/Reports";
+import CompetitionManagement from "@/pages/CompetitionManagement";
+import CompetitionDetail from "@/pages/CompetitionDetail";
 import { useState } from "react";
 import { Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -77,6 +79,16 @@ function Router({ role }: { role: "admin" | "cluster_leader" | "user" }) {
       <Route path="/settings/users">
         <ProtectedRoute allowedRoles={usersAllowedRoles}>
           <UsersManagement />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/settings/competitions">
+        <ProtectedRoute allowedRoles={["admin"]}>
+          <CompetitionManagement />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/settings/competitions/:id">
+        <ProtectedRoute allowedRoles={["admin"]}>
+          <CompetitionDetail />
         </ProtectedRoute>
       </Route>
       <Route path="/my-units" component={() => <div className="p-6">Đơn vị của tôi</div>} />

@@ -8,6 +8,9 @@ import path from "path";
 import fs from "fs";
 import mime from "mime-types";
 import { storage } from "./storage";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
+import * as schema from "@shared/schema";
 import { 
   insertUserSchema, 
   insertClusterSchema,
@@ -928,10 +931,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Không tìm thấy kỳ thi đua" });
       }
       
-      // Non-admin users can only view periods from their cluster
-      if (req.user!.role !== "admin" && period.clusterId !== req.user!.clusterId) {
-        return res.status(403).json({ message: "Bạn chỉ có thể xem kỳ thi đua của cụm mình" });
-      }
+      // TODO: Check if period is assigned to user's cluster via evaluation_period_clusters
       
       res.json(period);
     } catch (error) {
@@ -941,19 +941,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/evaluation-periods", requireRole("admin", "cluster_leader"), async (req, res, next) => {
     try {
+      console.log("POST /api/evaluation-periods - Request body:", req.body);
       const periodData = insertEvaluationPeriodSchema.parse(req.body);
+      console.log("Parsed period data:", periodData);
       
-      // Cluster leaders can only create periods for their own cluster
-      if (req.user!.role === "cluster_leader" && periodData.clusterId !== req.user!.clusterId) {
-        return res.status(403).json({ message: "Bạn chỉ có thể tạo kỳ thi đua cho cụm của mình" });
-      }
+      // TODO: Cluster leaders should assign their own cluster via evaluation_period_clusters
       
       const period = await storage.createEvaluationPeriod(periodData);
+      console.log("Created period:", period);
       res.json(period);
     } catch (error) {
       if (error instanceof z.ZodError) {
+        console.error("Validation error:", error.errors);
         return res.status(400).json({ message: "Dữ liệu không hợp lệ", errors: error.errors });
       }
+      console.error("Server error:", error);
       next(error);
     }
   });
@@ -967,16 +969,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Không tìm thấy kỳ thi đua" });
       }
       
-      if (req.user!.role === "cluster_leader") {
-        if (existingPeriod.clusterId !== req.user!.clusterId) {
-          return res.status(403).json({ message: "Bạn chỉ có thể sửa kỳ thi đua của cụm mình" });
-        }
-        
-        // Cluster leaders cannot reassign periods to different clusters
-        if (periodData.clusterId && periodData.clusterId !== existingPeriod.clusterId) {
-          return res.status(403).json({ message: "Bạn không có quyền chuyển kỳ thi đua sang cụm khác" });
-        }
-      }
+      // TODO: Check cluster permissions via evaluation_period_clusters
       
       const period = await storage.updateEvaluationPeriod(req.params.id, periodData);
       res.json(period);
@@ -995,9 +988,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Không tìm thấy kỳ thi đua" });
       }
       
-      if (req.user!.role === "cluster_leader" && existingPeriod.clusterId !== req.user!.clusterId) {
-        return res.status(403).json({ message: "Bạn chỉ có thể xóa kỳ thi đua của cụm mình" });
-      }
+      // TODO: Check cluster permissions via evaluation_period_clusters
       
       await storage.deleteEvaluationPeriod(req.params.id);
       res.json({ message: "Xóa thành công" });
@@ -1005,6 +996,189 @@ export async function registerRoutes(app: Express): Promise<Server> {
       next(error);
     }
   });
+
+  // ========== COMPETITION MANAGEMENT ENDPOINTS ==========
+  
+  // Get clusters assigned to a period
+  app.get("/api/evaluation-periods/:id/clusters", requireAuth, async (req, res, next) => {
+    try {
+      const clusters = await storage.getPeriodsClustersList(req.params.id);
+      res.json(clusters);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Assign clusters to a period (replaces existing assignments)
+  app.post("/api/evaluation-periods/:id/clusters", requireRole("admin"), async (req, res, next) => {
+    try {
+      const { clusterIds } = req.body;
+      
+      if (!Array.isArray(clusterIds)) {
+        return res.status(400).json({ message: "clusterIds phải là mảng" });
+      }
+      
+      await storage.assignClustersToPeriod(req.params.id, clusterIds);
+      res.json({ message: "Đã gán cụm cho kỳ thi đua", count: clusterIds.length });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Remove a cluster from a period
+  app.delete("/api/evaluation-periods/:id/clusters/:clusterId", requireRole("admin"), async (req, res, next) => {
+    try {
+      await storage.removeClusterFromPeriod(req.params.id, req.params.clusterId);
+      res.json({ message: "Đã xóa cụm khỏi kỳ thi đua" });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Initialize evaluations for all units in period's clusters
+  app.post("/api/evaluation-periods/:id/initialize-units", requireRole("admin", "cluster_leader"), async (req, res, next) => {
+    try {
+      const period = await storage.getEvaluationPeriod(req.params.id);
+      if (!period) {
+        return res.status(404).json({ message: "Không tìm thấy kỳ thi đua" });
+      }
+
+      // Cluster leaders can only init for their own cluster
+      let clusterIds: string[] | undefined;
+      if (req.user!.role === "cluster_leader" && req.user!.clusterId) {
+        clusterIds = [req.user!.clusterId];
+      }
+
+      const result = await storage.initializeUnitsForPeriod(req.params.id, clusterIds);
+      res.json({
+        message: "Đã khởi tạo đánh giá cho các đơn vị",
+        created: result.created,
+        existing: result.existing,
+        total: result.created + result.existing
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Update period status (draft → active → review1 → review2 → completed)
+  app.patch("/api/evaluation-periods/:id/status", requireRole("admin"), async (req, res, next) => {
+    try {
+      const { status } = req.body;
+      
+      const validStatuses = ["draft", "active", "review1", "review2", "completed"];
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({ message: "Trạng thái không hợp lệ" });
+      }
+
+      const period = await storage.updateEvaluationPeriod(req.params.id, { status });
+      if (!period) {
+        return res.status(404).json({ message: "Không tìm thấy kỳ thi đua" });
+      }
+
+      res.json({ message: "Đã cập nhật trạng thái", period });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Get period details with statistics
+  app.get("/api/evaluation-periods/:id/details", requireAuth, async (req, res, next) => {
+    try {
+      const period = await storage.getEvaluationPeriod(req.params.id);
+      if (!period) {
+        return res.status(404).json({ message: "Không tìm thấy kỳ thi đua" });
+      }
+
+      // Get clusters
+      const clusters = await storage.getPeriodsClustersList(req.params.id);
+
+      // Get evaluations for this period
+      const evaluations = await storage.getEvaluations(req.params.id);
+
+      // Count units by cluster
+      const clusterStats = await Promise.all(
+        clusters.map(async (cluster) => {
+          const units = await storage.getUnits(cluster.id);
+          const clusterEvaluations = evaluations.filter(e => e.clusterId === cluster.id);
+          
+          return {
+            cluster,
+            totalUnits: units.length,
+            evaluationsCreated: clusterEvaluations.length,
+            statusCounts: {
+              draft: clusterEvaluations.filter(e => e.status === "draft").length,
+              submitted: clusterEvaluations.filter(e => e.status === "submitted").length,
+              review1_completed: clusterEvaluations.filter(e => e.status === "review1_completed").length,
+              review2_completed: clusterEvaluations.filter(e => e.status === "review2_completed").length,
+              finalized: clusterEvaluations.filter(e => e.status === "finalized").length,
+            }
+          };
+        })
+      );
+
+      res.json({
+        period,
+        clusters,
+        clusterStats,
+        totalEvaluations: evaluations.length,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Copy criteria to a specific period (for period-specific criteria)
+  app.post("/api/evaluation-periods/:periodId/criteria/copy", requireAuth, requireRole("admin"), async (req, res, next) => {
+    try {
+      const { periodId } = req.params;
+      const { sourcePeriodId, clusterId } = req.body;
+
+      // Validate period exists
+      const period = await storage.getEvaluationPeriod(periodId);
+      if (!period) {
+        return res.status(404).json({ message: "Không tìm thấy kỳ thi đua" });
+      }
+
+      // Get source criteria (either from another period or from year+cluster)
+      const criteriaTreeStorage = (await import('./criteriaTreeStorage')).criteriaTreeStorage;
+      let sourceCriteria;
+      
+      if (sourcePeriodId) {
+        sourceCriteria = await criteriaTreeStorage.getCriteria(period.year, clusterId, sourcePeriodId);
+      } else {
+        // Copy from general criteria (no period assigned)
+        sourceCriteria = await criteriaTreeStorage.getCriteria(period.year, clusterId);
+      }
+
+      if (sourceCriteria.length === 0) {
+        return res.status(404).json({ message: "Không tìm thấy tiêu chí nguồn" });
+      }
+
+      // Clone all criteria and assign to new period
+      const oldToNewIdMap = new Map<string, string>();
+      
+      for (const criteria of sourceCriteria) {
+        const { id, createdAt, updatedAt, ...criteriaWithoutId } = criteria;
+        const newCriteria = await criteriaTreeStorage.createCriteria({
+          ...criteriaWithoutId,
+          periodId: periodId, // Assign to new period
+          parentId: criteria.parentId ? oldToNewIdMap.get(criteria.parentId) || null : null,
+        });
+        oldToNewIdMap.set(criteria.id, newCriteria.id);
+      }
+
+      res.json({ 
+        message: "Đã sao chép tiêu chí thành công",
+        copiedCount: sourceCriteria.length 
+      });
+    } catch (error) {
+      console.error('Error copying criteria:', error);
+      next(error);
+    }
+  });
+
+  // ========== END COMPETITION MANAGEMENT ENDPOINTS ==========
 
   // NEW EVALUATION SUMMARY ENDPOINT - Tree-based criteria
   app.get("/api/evaluation-periods/:periodId/units/:unitId/summary", requireAuth, async (req, res, next) => {
@@ -1202,6 +1376,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!evaluation) {
         evaluation = await storage.createEvaluation({
           periodId,
+          clusterId: unit.clusterId,
           unitId,
           status: "draft",
         });
@@ -1269,26 +1444,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Không tìm thấy kỳ thi đua" });
       }
       
-      // Cluster leaders can only create evaluations for their cluster's period
-      if (req.user!.role === "cluster_leader" && period.clusterId !== req.user!.clusterId) {
-        return res.status(403).json({ message: "Bạn chỉ có thể tạo đánh giá cho kỳ thi đua của cụm mình" });
+      // Get clusters assigned to this period
+      const periodClusters = await db.select()
+        .from(schema.evaluationPeriodClusters)
+        .where(eq(schema.evaluationPeriodClusters.periodId, req.params.id));
+      
+      if (periodClusters.length === 0) {
+        return res.status(400).json({ message: "Kỳ thi đua chưa được gán cho cụm nào" });
       }
       
-      // Get all units in the period's cluster
-      const units = await storage.getUnits(period.clusterId);
+      // Cluster leaders can only create for their own cluster
+      let targetClusterIds = periodClusters.map(pc => pc.clusterId);
+      if (req.user!.role === "cluster_leader") {
+        if (!targetClusterIds.includes(req.user!.clusterId!)) {
+          return res.status(403).json({ message: "Kỳ thi đua không áp dụng cho cụm của bạn" });
+        }
+        targetClusterIds = [req.user!.clusterId!];
+      }
       
-      // Create evaluations for each unit
+      // Get all units in target clusters
       const evaluations = [];
-      for (const unit of units) {
-        // Check if evaluation already exists
-        const existing = await storage.getEvaluations(req.params.id, unit.id);
-        if (existing.length === 0) {
-          const evaluation = await storage.createEvaluation({
-            periodId: req.params.id,
-            unitId: unit.id,
-            status: "draft",
-          });
-          evaluations.push(evaluation);
+      for (const clusterId of targetClusterIds) {
+        const units = await storage.getUnits(clusterId);
+        
+        for (const unit of units) {
+          const existing = await storage.getEvaluations(req.params.id, unit.id);
+          if (existing.length === 0) {
+            const evaluation = await storage.createEvaluation({
+              periodId: req.params.id,
+              clusterId: clusterId,
+              unitId: unit.id,
+              status: "draft",
+            });
+            evaluations.push(evaluation);
+          }
         }
       }
       

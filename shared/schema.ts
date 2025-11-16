@@ -83,7 +83,10 @@ export const criteria = pgTable("criteria", {
   
   // Áp dụng theo năm và cụm
   year: integer("year").notNull(), // Năm áp dụng (VD: 2025)
-  clusterId: varchar("cluster_id").references(() => clusters.id, { onDelete: "cascade" }), // Cụm áp dụng, null=tất cả cụm
+  clusterId: varchar("cluster_id").notNull().references(() => clusters.id, { onDelete: "cascade" }), // Mỗi cụm có bộ tiêu chí riêng
+  
+  // Gắn với kỳ thi đua cụ thể (optional - nếu null thì áp dụng cho tất cả kỳ trong năm)
+  periodId: varchar("period_id").references(() => evaluationPeriods.id, { onDelete: "cascade" }),
   
   isActive: integer("is_active").notNull().default(1), // 1=active, 0=inactive
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -220,19 +223,31 @@ export type CriteriaTarget = typeof criteriaTargets.$inferSelect;
 export type InsertCriteriaResult = z.infer<typeof insertCriteriaResultSchema>;
 export type CriteriaResult = typeof criteriaResults.$inferSelect;
 
-// Evaluation Periods (Kỳ thi đua)
+// Evaluation Periods (Kỳ thi đua) - Cấp tỉnh, áp dụng cho nhiều cụm
 export const evaluationPeriods = pgTable("evaluation_periods", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   year: integer("year").notNull(),
-  clusterId: varchar("cluster_id").notNull().references(() => clusters.id, { onDelete: "cascade" }),
   startDate: timestamp("start_date").notNull(),
   endDate: timestamp("end_date").notNull(),
   status: text("status").notNull().default("draft"), // draft, active, review1, review2, completed
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const insertEvaluationPeriodSchema = createInsertSchema(evaluationPeriods).omit({
+// Evaluation Period Clusters (Bảng trung gian: 1 kỳ thi đua → nhiều cụm)
+export const evaluationPeriodClusters = pgTable("evaluation_period_clusters", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  periodId: varchar("period_id").notNull().references(() => evaluationPeriods.id, { onDelete: "cascade" }),
+  clusterId: varchar("cluster_id").notNull().references(() => clusters.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  uniqPeriodCluster: unique().on(table.periodId, table.clusterId),
+}));
+
+export const insertEvaluationPeriodSchema = createInsertSchema(evaluationPeriods, {
+  startDate: z.coerce.date(),
+  endDate: z.coerce.date(),
+}).omit({
   id: true,
   createdAt: true,
 });
@@ -240,10 +255,19 @@ export const insertEvaluationPeriodSchema = createInsertSchema(evaluationPeriods
 export type InsertEvaluationPeriod = z.infer<typeof insertEvaluationPeriodSchema>;
 export type EvaluationPeriod = typeof evaluationPeriods.$inferSelect;
 
+export const insertEvaluationPeriodClusterSchema = createInsertSchema(evaluationPeriodClusters).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertEvaluationPeriodCluster = z.infer<typeof insertEvaluationPeriodClusterSchema>;
+export type EvaluationPeriodCluster = typeof evaluationPeriodClusters.$inferSelect;
+
 // Evaluations (Đánh giá cho từng đơn vị trong kỳ)
 export const evaluations = pgTable("evaluations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   periodId: varchar("period_id").notNull().references(() => evaluationPeriods.id, { onDelete: "cascade" }),
+  clusterId: varchar("cluster_id").notNull().references(() => clusters.id, { onDelete: "cascade" }),
   unitId: varchar("unit_id").notNull().references(() => units.id, { onDelete: "cascade" }),
   status: text("status").notNull().default("draft"), // draft, submitted, review1_completed, explanation_submitted, review2_completed, finalized
   totalSelfScore: decimal("total_self_score", { precision: 7, scale: 2 }),

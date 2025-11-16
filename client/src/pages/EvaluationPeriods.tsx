@@ -73,32 +73,63 @@ export default function EvaluationPeriods() {
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [selectedCriteria, setSelectedCriteria] = useState<Criteria | null>(null);
   const [reviewType, setReviewType] = useState<"review1" | "review2">("review1");
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string>('');
   const [selectedClusterId, setSelectedClusterId] = useState<string>('');
   const [selectedUnitId, setSelectedUnitId] = useState<string>('');
   const [submitDialogOpen, setSubmitDialogOpen] = useState(false);
 
-  // Query clusters
-  const { 
-    data: clusters, 
-    isLoading: loadingClusters 
-  } = useQuery<any[]>({
-    queryKey: ['/api/clusters'],
-    enabled: !!user,
-  });
-
-  // Query units (filtered by cluster if selected)
-  const { 
-    data: units, 
-    isLoading: loadingUnits 
-  } = useQuery<any[]>({
-    queryKey: ['/api/units'],
-    enabled: !!user,
-  });
-
   // Query evaluation periods
   const { 
-    data: periods, 
+    data: periods = [],
+    isLoading: loadingPeriods 
+  } = useQuery<any[]>({
+    queryKey: ['/api/evaluation-periods'],
+    enabled: !!user,
+  });
+
+  // Query clusters for selected period
+  const { 
+    data: periodClusters = [], 
+    isLoading: loadingClusters 
+  } = useQuery<any[]>({
+    queryKey: [`/api/evaluation-periods/${selectedPeriodId}/clusters`],
+    enabled: !!selectedPeriodId,
+  });
+
+  // Query units (filtered by cluster)
+  const { 
+    data: units = [], 
+    isLoading: loadingUnits 
+  } = useQuery<any[]>({
+    queryKey: ['/api/units', selectedClusterId],
+    queryFn: async () => {
+      const res = await fetch(`/api/units${selectedClusterId ? `?clusterId=${selectedClusterId}` : ''}`, {
+        credentials: 'include'
+      });
+      if (!res.ok) throw new Error('Failed to fetch units');
+      return res.json();
+    },
+    enabled: !!selectedClusterId,
+  });
+
+  // Auto-select for unit users
+  useEffect(() => {
+    if (user?.role === 'user' && user.unitId) {
+      setSelectedUnitId(user.unitId);
+      // Get unit to find cluster
+      fetch(`/api/units/${user.unitId}`, { credentials: 'include' })
+        .then(res => res.json())
+        .then(unit => {
+          setSelectedClusterId(unit.clusterId);
+        });
+    } else if (user?.role === 'cluster_leader' && user.clusterId) {
+      setSelectedClusterId(user.clusterId);
+    }
+  }, [user]);
+
+  // Query evaluation periods (renamed from old variable)
+  const { 
+    data: oldPeriods, 
     isLoading: loadingPeriods, 
     error: periodsError,
     refetch: refetchPeriods 

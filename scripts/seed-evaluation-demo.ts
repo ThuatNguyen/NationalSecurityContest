@@ -41,13 +41,19 @@ async function seedEvaluationDemo() {
       const [newPeriod] = await db.insert(schema.evaluationPeriods).values({
         name: "Kỳ thi đua năm 2025",
         year: 2025,
-        clusterId: cluster.id,
         startDate: new Date("2025-01-01"),
         endDate: new Date("2025-12-31"),
         status: "active",
       }).returning();
       period = newPeriod;
       console.log(`✅ Created evaluation period: ${period.name}`);
+      
+      // Gán period cho cluster qua bảng junction
+      await db.insert(schema.evaluationPeriodClusters).values({
+        periodId: period.id,
+        clusterId: cluster.id,
+      });
+      console.log(`✅ Assigned period to cluster: ${cluster.name}`);
     }
 
     // 3. Xóa tiêu chí cũ nếu có (để tạo lại từ đầu)
@@ -235,6 +241,7 @@ async function seedEvaluationDemo() {
     for (const unit of units) {
       await db.insert(schema.evaluations).values({
         periodId: period.id,
+        clusterId: cluster.id, // Lấy từ cluster của đơn vị
         unitId: unit.id,
         status: "draft",
       }).onConflictDoNothing();

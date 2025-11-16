@@ -18,7 +18,8 @@ import {
   Building2, 
   Users, 
   ClipboardList, 
-  Calendar, 
+  Calendar,
+  Trophy, 
   FileText,
   Settings,
   ChevronDown,
@@ -119,6 +120,13 @@ export const SETTINGS_NAV_ITEMS: NavItem[] = [
     icon: Users, 
     testId: "nav-users",
     allowedRoles: ["admin", "cluster_leader"]
+  },
+  { 
+    title: "Quản lý Kỳ thi đua", 
+    url: "/settings/competitions", 
+    icon: Trophy, 
+    testId: "nav-competitions",
+    allowedRoles: ["admin"]
   },
 ];
 

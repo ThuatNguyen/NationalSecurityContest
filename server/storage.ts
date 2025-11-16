@@ -59,6 +59,14 @@ export interface IStorage {
   updateEvaluationPeriod(id: string, period: Partial<InsertEvaluationPeriod>): Promise<EvaluationPeriod | undefined>;
   deleteEvaluationPeriod(id: string): Promise<void>;
   
+  // Evaluation Period Clusters (many-to-many)
+  assignClustersToPeriod(periodId: string, clusterIds: string[]): Promise<void>;
+  getPeriodsClustersList(periodId: string): Promise<Cluster[]>;
+  removeClusterFromPeriod(periodId: string, clusterId: string): Promise<void>;
+  
+  // Competition Management - Initialize units
+  initializeUnitsForPeriod(periodId: string, clusterIds?: string[]): Promise<{ created: number; existing: number }>;
+  
   // Evaluations
   getEvaluations(periodId?: string, unitId?: string): Promise<Evaluation[]>;
   getEvaluation(id: string): Promise<Evaluation | undefined>;
@@ -386,9 +394,8 @@ export class DatabaseStorage implements IStorage {
 
   // Evaluation Periods
   async getEvaluationPeriods(clusterId?: string): Promise<EvaluationPeriod[]> {
-    if (clusterId) {
-      return await db.select().from(schema.evaluationPeriods).where(eq(schema.evaluationPeriods.clusterId, clusterId));
-    }
+    // NOTE: Period không còn thuộc 1 cụm cố định, filter theo clusterId đã được gỡ bỏ
+    // Nếu cần filter theo cluster, query qua bảng evaluation_period_clusters
     return await db.select().from(schema.evaluationPeriods);
   }
 
@@ -409,6 +416,98 @@ export class DatabaseStorage implements IStorage {
 
   async deleteEvaluationPeriod(id: string): Promise<void> {
     await db.delete(schema.evaluationPeriods).where(eq(schema.evaluationPeriods.id, id));
+  }
+
+  // Evaluation Period Clusters (many-to-many mapping)
+  async assignClustersToPeriod(periodId: string, clusterIds: string[]): Promise<void> {
+    // Delete existing assignments
+    await db.delete(schema.evaluationPeriodClusters)
+      .where(eq(schema.evaluationPeriodClusters.periodId, periodId));
+    
+    // Insert new assignments
+    if (clusterIds.length > 0) {
+      await db.insert(schema.evaluationPeriodClusters).values(
+        clusterIds.map(clusterId => ({
+          periodId,
+          clusterId,
+        }))
+      );
+    }
+  }
+
+  async getPeriodsClustersList(periodId: string): Promise<Cluster[]> {
+    const result = await db
+      .select({
+        id: schema.clusters.id,
+        name: schema.clusters.name,
+        createdAt: schema.clusters.createdAt,
+      })
+      .from(schema.evaluationPeriodClusters)
+      .innerJoin(schema.clusters, eq(schema.evaluationPeriodClusters.clusterId, schema.clusters.id))
+      .where(eq(schema.evaluationPeriodClusters.periodId, periodId));
+    
+    return result as Cluster[];
+  }
+
+  async removeClusterFromPeriod(periodId: string, clusterId: string): Promise<void> {
+    await db.delete(schema.evaluationPeriodClusters)
+      .where(
+        and(
+          eq(schema.evaluationPeriodClusters.periodId, periodId),
+          eq(schema.evaluationPeriodClusters.clusterId, clusterId)
+        )
+      );
+  }
+
+  // Competition Management - Initialize units for period
+  async initializeUnitsForPeriod(periodId: string, clusterIds?: string[]): Promise<{ created: number; existing: number }> {
+    // Get clusters for this period
+    let targetClusters: string[];
+    if (clusterIds && clusterIds.length > 0) {
+      targetClusters = clusterIds;
+    } else {
+      const periodClusters = await db
+        .select({ clusterId: schema.evaluationPeriodClusters.clusterId })
+        .from(schema.evaluationPeriodClusters)
+        .where(eq(schema.evaluationPeriodClusters.periodId, periodId));
+      targetClusters = periodClusters.map(pc => pc.clusterId);
+    }
+
+    let created = 0;
+    let existing = 0;
+
+    // For each cluster, get all units and create evaluations
+    for (const clusterId of targetClusters) {
+      const units = await this.getUnits(clusterId);
+      
+      for (const unit of units) {
+        // Check if evaluation already exists
+        const existingEval = await db
+          .select()
+          .from(schema.evaluations)
+          .where(
+            and(
+              eq(schema.evaluations.periodId, periodId),
+              eq(schema.evaluations.unitId, unit.id)
+            )
+          )
+          .limit(1);
+
+        if (existingEval.length === 0) {
+          await db.insert(schema.evaluations).values({
+            periodId,
+            clusterId,
+            unitId: unit.id,
+            status: "draft",
+          });
+          created++;
+        } else {
+          existing++;
+        }
+      }
+    }
+
+    return { created, existing };
   }
 
   // Evaluations
@@ -662,12 +761,16 @@ export class DatabaseStorage implements IStorage {
     const period = await this.getEvaluationPeriod(periodId);
     if (!period) return null;
 
+    // Get unit to determine cluster
+    const unit = await this.getUnit(unitId);
+    if (!unit) return null;
+
     // Get evaluation (or return null if not exists yet)
     const evaluation = await this.getEvaluationByPeriodUnit(periodId, unitId) || null;
 
-    // Get criteria tree for this period's year and cluster
+    // Get criteria tree for this period's year and UNIT'S cluster, filtered by periodId
     const criteriaTreeStorage = (await import('./criteriaTreeStorage')).criteriaTreeStorage;
-    const criteriaTree = await criteriaTreeStorage.getCriteriaTree(period.year, period.clusterId);
+    const criteriaTree = await criteriaTreeStorage.getCriteriaTree(period.year, unit.clusterId, periodId);
 
     // Get all scores for this evaluation
     const scores = evaluation ? await this.getScores(evaluation.id) : [];
@@ -684,6 +787,7 @@ export class DatabaseStorage implements IStorage {
         maxScore: parseFloat(node.maxScore),
         displayOrder: node.orderIndex,
         level: node.level,
+        criteriaType: node.criteriaType, // Add criteriaType to identify leaf criteria
         code: node.code || currentPath,
         selfScore: score?.selfScore ? parseFloat(score.selfScore) : undefined,
         selfScoreFile: score?.selfScoreFile || null,

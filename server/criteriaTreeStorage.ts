@@ -20,19 +20,25 @@ export class CriteriaTreeStorage {
   // CRITERIA CRUD (Tree operations)
   // ============================================
   
-  /**
-   * Lấy tất cả tiêu chí theo năm và cụm
-   * Logic: Lấy criteria có cluster_id = clusterId HOẶC cluster_id = NULL (áp dụng cho tất cả)
+    /**
+   * Lấy tất cả criteria theo year, clusterId và periodId (optional)
+   * Logic: Mỗi cụm có BỘ TIÊU CHÍ RIÊNG - chỉ lấy criteria có cluster_id = clusterId
+   * Nếu có periodId thì ưu tiên lấy criteria gắn với period đó, fallback về criteria không gắn period
    */
-  async getCriteria(year: number, clusterId?: string): Promise<Criteria[]> {
+  async getCriteria(year: number, clusterId?: string, periodId?: string): Promise<Criteria[]> {
     const conditions: any[] = [eq(schema.criteria.year, year)];
     
     if (clusterId) {
-      // Lấy criteria cho cụm cụ thể HOẶC áp dụng cho tất cả (NULL)
+      // CHỈ lấy criteria của cụm cụ thể (không lấy criteria có cluster_id = NULL)
+      conditions.push(eq(schema.criteria.clusterId, clusterId));
+    }
+    
+    // Nếu có periodId thì lọc theo period hoặc lấy criteria chung (periodId = null)
+    if (periodId) {
       conditions.push(
         or(
-          eq(schema.criteria.clusterId, clusterId),
-          isNull(schema.criteria.clusterId)
+          eq(schema.criteria.periodId, periodId),
+          isNull(schema.criteria.periodId)
         )
       );
     }
@@ -49,8 +55,8 @@ export class CriteriaTreeStorage {
   /**
    * Lấy cây tiêu chí đầy đủ (recursive tree structure)
    */
-  async getCriteriaTree(year: number, clusterId?: string): Promise<CriteriaWithChildren[]> {
-    const allCriteria = await this.getCriteria(year, clusterId);
+  async getCriteriaTree(year: number, clusterId?: string, periodId?: string): Promise<CriteriaWithChildren[]> {
+    const allCriteria = await this.getCriteria(year, clusterId, periodId);
     
     // Build tree recursively
     const buildTree = (parentId: string | null): CriteriaWithChildren[] => {

@@ -117,87 +117,98 @@ export default function EvaluationPeriods() {
     enabled: !!selectedClusterId,
   });
 
+  // Memoize available years from periods
+  const availableYears = useMemo(() => {
+    if (!periods || periods.length === 0) return [];
+    const years = Array.from(new Set(periods.map(p => p.year))).sort((a, b) => b - a);
+    return years;
+  }, [periods]);
+
+  // Step 1: Auto-select year based on available data
+  useEffect(() => {
+    if (availableYears.length > 0 && !availableYears.includes(selectedYear)) {
+      // If current selectedYear is not in available years, select the latest year
+      setSelectedYear(availableYears[0]);
+    }
+  }, [availableYears, selectedYear]);
+
+  // Memoize filtered periods by year and role
+  const filteredPeriods = useMemo(() => {
+    if (!periods || periods.length === 0) return [];
+    return periods.filter(p => {
+      if (p.year !== selectedYear) return false;
+      // For unit users, only show periods that match their cluster
+      if (user?.role === 'user' && user.clusterId) {
+        return p.clusterId === user.clusterId;
+      }
+      // For cluster leaders, only show periods in their cluster
+      if (user?.role === 'cluster_leader' && user.clusterId) {
+        return p.clusterId === user.clusterId;
+      }
+      // Admin sees all periods for the selected year
+      return true;
+    });
+  }, [periods, selectedYear, user]);
+
+  const selectedPeriod = filteredPeriods[0]; // First matching period
+
+  // Step 2: Auto-select period ID when period changes
+  useEffect(() => {
+    if (selectedPeriod && selectedPeriod.id !== selectedPeriodId) {
+      setSelectedPeriodId(selectedPeriod.id);
+    }
+  }, [selectedPeriod, selectedPeriodId]);
+
+  // Step 3: Auto-select cluster based on user role
+  useEffect(() => {
+    if (!user || !selectedPeriod) return;
+
+    // For unit users: use their cluster from user object
+    if (user.role === 'user' && user.clusterId && selectedClusterId !== user.clusterId) {
+      setSelectedClusterId(user.clusterId);
+      return;
+    }
+
+    // For cluster leaders: use their cluster
+    if (user.role === 'cluster_leader' && user.clusterId && selectedClusterId !== user.clusterId) {
+      setSelectedClusterId(user.clusterId);
+      return;
+    }
+
+    // For admin: auto-select first cluster in period
+    if (user.role === 'admin' && !selectedClusterId && clusters.length > 0) {
+      setSelectedClusterId(clusters[0].id);
+    }
+  }, [user, selectedPeriod, clusters, selectedClusterId]);
+
+  // Step 4: Auto-select unit based on user role
+  useEffect(() => {
+    if (!user || !selectedClusterId || !units || units.length === 0) return;
+
+    // For unit users: use their unit from user object
+    if (user.role === 'user' && user.unitId && selectedUnitId !== user.unitId) {
+      setSelectedUnitId(user.unitId);
+      return;
+    }
+
+    // For cluster leaders and admin: auto-select first unit in selected cluster
+    const unitsInCluster = units.filter(u => u.clusterId === selectedClusterId);
+    if (unitsInCluster.length > 0 && !selectedUnitId) {
+      setSelectedUnitId(unitsInCluster[0].id);
+    }
+  }, [user, selectedClusterId, units, selectedUnitId]);
+
   // Memoize filtered units by selected cluster
   const filteredUnits = useMemo(() => {
     if (!units || !selectedClusterId) return [];
     return units.filter(u => u.clusterId === selectedClusterId);
   }, [units, selectedClusterId]);
 
-  // Set default cluster and unit based on role
-  useEffect(() => {
-    if (!user || !clusters || !units) return;
-
-    // Skip if already set
-    if (selectedClusterId && selectedUnitId) return;
-
-    if (user.role === 'admin') {
-      // Admin: default to first cluster
-      if (!selectedClusterId && clusters.length > 0) {
-        const firstCluster = clusters[0];
-        setSelectedClusterId(firstCluster.id);
-        
-        // Then default to first unit in that cluster
-        const unitsInCluster = units.filter(u => u.clusterId === firstCluster.id);
-        if (unitsInCluster.length > 0) {
-          setSelectedUnitId(unitsInCluster[0].id);
-        }
-      }
-    } else if (user.role === 'cluster_leader') {
-      // Cluster leader: lock to their cluster
-      if (!selectedClusterId && user.clusterId) {
-        setSelectedClusterId(user.clusterId);
-        
-        // Default to first unit in their cluster
-        const unitsInCluster = units.filter(u => u.clusterId === user.clusterId);
-        if (unitsInCluster.length > 0) {
-          setSelectedUnitId(unitsInCluster[0].id);
-        }
-      }
-    } else {
-      // User: lock to their unit's cluster and their unit
-      if (!selectedClusterId && !selectedUnitId && user.unitId) {
-        const userUnit = units.find(u => u.id === user.unitId);
-        if (userUnit) {
-          setSelectedClusterId(userUnit.clusterId);
-          setSelectedUnitId(user.unitId);
-        }
-      }
-    }
-  }, [user, clusters, units, selectedClusterId, selectedUnitId]);
-
   // Handle cluster change (only for admin)
   const handleClusterChange = (clusterId: string) => {
     setSelectedClusterId(clusterId);
-    // Reset unit when cluster changes
-    setSelectedUnitId('');
-    
-    // Auto-select first unit in new cluster
-    const unitsInCluster = units?.filter(u => u.clusterId === clusterId) || [];
-    if (unitsInCluster.length > 0) {
-      setSelectedUnitId(unitsInCluster[0].id);
-    }
+    setSelectedUnitId(''); // Reset unit when cluster changes
   };
-
-  // Memoize available years from periods
-  const availableYears = useMemo(() => {
-    if (!periods) return [];
-    const years = Array.from(new Set(periods.map(p => p.year))).sort((a, b) => b - a);
-    return years;
-  }, [periods]);
-
-  // Memoize filtered periods
-  const filteredPeriods = useMemo(() => {
-    if (!periods) return [];
-    return periods.filter(p => {
-      if (p.year !== selectedYear) return false;
-      if (user?.role === 'cluster_leader' && p.clusterId !== user.clusterId) return false;
-      // Admin: filter by selected cluster
-      if (user?.role === 'admin' && selectedClusterId && p.clusterId !== selectedClusterId) return false;
-      return true;
-    });
-  }, [periods, selectedYear, user, selectedClusterId]);
-
-  const selectedPeriod = filteredPeriods[0]; // Auto-select first period
 
   // Query evaluation summary (only when period and unit are available)
   const { 

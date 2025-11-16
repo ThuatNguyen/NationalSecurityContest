@@ -74,7 +74,6 @@ export default function EvaluationPeriods() {
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [selectedCriteria, setSelectedCriteria] = useState<Criteria | null>(null);
   const [reviewType, setReviewType] = useState<"review1" | "review2">("review1");
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>('');
   const [selectedClusterId, setSelectedClusterId] = useState<string>('');
   const [selectedUnitId, setSelectedUnitId] = useState<string>('');
@@ -116,38 +115,23 @@ export default function EvaluationPeriods() {
     enabled: !!selectedClusterId,
   });
 
-  // Memoize available years from periods
-  const availableYears = useMemo(() => {
-    if (!periods || periods.length === 0) return [];
-    const years = Array.from(new Set(periods.map(p => p.year))).sort((a, b) => b - a);
-    return years;
-  }, [periods]);
-
-  // Step 1: Auto-select year based on available data
-  useEffect(() => {
-    if (availableYears.length > 0 && !availableYears.includes(selectedYear)) {
-      // If current selectedYear is not in available years, select the latest year
-      setSelectedYear(availableYears[0]);
+  // Get selected period from periods list
+  const selectedPeriod = useMemo(() => {
+    if (!periods || periods.length === 0) return null;
+    if (selectedPeriodId) {
+      return periods.find(p => p.id === selectedPeriodId) || null;
     }
-  }, [availableYears, selectedYear]);
+    return null;
+  }, [periods, selectedPeriodId]);
 
-  // Memoize filtered periods by year only
-  // NOTE: Periods don't have clusterId - they apply to multiple clusters via evaluationPeriodClusters table
-  const filteredPeriods = useMemo(() => {
-    if (!periods || periods.length === 0) return [];
-    return periods.filter(p => p.year === selectedYear);
-  }, [periods, selectedYear]);
-
-  const selectedPeriod = filteredPeriods[0]; // First matching period
-
-  // Step 2: Auto-select period ID when period changes
+  // Step 1: Auto-select first period when periods are loaded
   useEffect(() => {
-    if (selectedPeriod && selectedPeriod.id !== selectedPeriodId) {
-      setSelectedPeriodId(selectedPeriod.id);
+    if (periods && periods.length > 0 && !selectedPeriodId) {
+      setSelectedPeriodId(periods[0].id);
     }
-  }, [selectedPeriod, selectedPeriodId]);
+  }, [periods, selectedPeriodId]);
 
-  // Step 3: Auto-select cluster based on user role
+  // Step 2: Auto-select cluster based on user role
   useEffect(() => {
     if (!user || !selectedPeriod) return;
 
@@ -169,7 +153,7 @@ export default function EvaluationPeriods() {
     }
   }, [user, selectedPeriod, clusters, selectedClusterId]);
 
-  // Step 4: Auto-select unit based on user role
+  // Step 3: Auto-select unit based on user role
   useEffect(() => {
     if (!user || !selectedClusterId || !units || units.length === 0) return;
 
@@ -533,32 +517,32 @@ export default function EvaluationPeriods() {
       </div>
 
       <div className="flex flex-wrap gap-4 p-4 bg-card border rounded-md">
-        {/* Năm thi đua */}
+        {/* Kỳ thi đua */}
         <div className="flex-1 min-w-[200px]">
-          <Label htmlFor="filter-year" className="text-xs font-semibold uppercase tracking-wide mb-2 block">
-            Năm thi đua
+          <Label htmlFor="filter-period" className="text-xs font-semibold uppercase tracking-wide mb-2 block">
+            Kỳ thi đua
           </Label>
           {loadingPeriods ? (
             <Skeleton className="h-10 w-full" />
-          ) : availableYears.length > 0 ? (
+          ) : periods.length > 0 ? (
             <Select 
-              value={selectedYear.toString()} 
-              onValueChange={(v) => setSelectedYear(parseInt(v))}
+              value={selectedPeriodId} 
+              onValueChange={setSelectedPeriodId}
             >
-              <SelectTrigger id="filter-year" data-testid="select-year">
-                <SelectValue placeholder="Chọn năm" />
+              <SelectTrigger id="filter-period" data-testid="select-period">
+                <SelectValue placeholder="Chọn kỳ thi đua" />
               </SelectTrigger>
               <SelectContent>
-                {availableYears.map(year => (
-                  <SelectItem key={year} value={year.toString()}>
-                    {year}
+                {periods.map(period => (
+                  <SelectItem key={period.id} value={period.id}>
+                    {period.name}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           ) : (
             <div className="h-10 px-3 py-2 border rounded-md bg-muted text-sm text-muted-foreground">
-              Chưa có dữ liệu
+              Chưa có kỳ thi đua
             </div>
           )}
         </div>

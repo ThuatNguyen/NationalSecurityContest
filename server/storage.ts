@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and, sql as sqlExpr } from "drizzle-orm";
+import { eq, and, sql as sqlExpr, inArray } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import type { 
   User, InsertUser,
@@ -394,9 +394,24 @@ export class DatabaseStorage implements IStorage {
 
   // Evaluation Periods
   async getEvaluationPeriods(clusterId?: string): Promise<EvaluationPeriod[]> {
-    // NOTE: Period không còn thuộc 1 cụm cố định, filter theo clusterId đã được gỡ bỏ
-    // Nếu cần filter theo cluster, query qua bảng evaluation_period_clusters
-    return await db.select().from(schema.evaluationPeriods);
+    if (!clusterId) {
+      // Admin: return all periods
+      return await db.select().from(schema.evaluationPeriods);
+    }
+    
+    // Non-admin: return only periods assigned to this cluster via evaluationPeriodClusters
+    const periodClusters = await db.select()
+      .from(schema.evaluationPeriodClusters)
+      .where(eq(schema.evaluationPeriodClusters.clusterId, clusterId));
+    
+    if (periodClusters.length === 0) {
+      return [];
+    }
+    
+    const periodIds = periodClusters.map(pc => pc.periodId);
+    return await db.select()
+      .from(schema.evaluationPeriods)
+      .where(inArray(schema.evaluationPeriods.id, periodIds));
   }
 
   async getEvaluationPeriod(id: string): Promise<EvaluationPeriod | undefined> {

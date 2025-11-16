@@ -649,10 +649,7 @@ export default function EvaluationPeriods() {
       ) : !selectedPeriod ? (
         <div className="border rounded-md p-8 text-center">
           <p className="text-muted-foreground">
-            {selectedClusterId 
-              ? `Không có kỳ thi đua nào cho cụm này và năm ${selectedYear}. Vui lòng chọn cụm khác hoặc năm khác.`
-              : `Không có kỳ thi đua nào cho năm ${selectedYear}`
-            }
+            Vui lòng chọn kỳ thi đua để xem dữ liệu
           </p>
         </div>
       ) : !summary ? (

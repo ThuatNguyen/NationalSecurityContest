@@ -5,6 +5,32 @@ This web application digitizes and streamlines the evaluation process for the Vi
 
 ## Recent Changes
 
+### 2025-11-16: Reversed UX Flow from Cluster → Period to Period → Cluster
+- **Problem**: Previous UX required selecting cluster first, then period. This didn't match operational workflow where admins create periods, then assign clusters to them.
+- **Root Cause**: 
+  - CriteriaTreeManagement and CriteriaScoring used Cluster → Period filter order
+  - Users found it counter-intuitive compared to admin setup workflow (create period → assign clusters → manage criteria)
+  - No way to see which clusters are assigned to a selected period
+- **Solution**:
+  - **Backend**: Added GET `/api/evaluation-periods/:periodId/clusters` endpoint to fetch clusters for a period
+  - **CriteriaTreeManagement**: Reversed to Period → Cluster order with:
+    - Active period dropdown first (shows active periods at top)
+    - Cluster dropdown populated from period's assigned clusters
+    - Auto-resets cluster when period changes
+  - **CriteriaScoring**: 
+    - Added Period → Cluster query gating - all queries (tree, results, summary) require both `periodId` AND `clusterId`
+    - Updated query keys to include clusterId for proper cache invalidation
+    - Shows helpful message: "Chưa có kỳ thi đua nào được kích hoạt" or "Đơn vị của bạn chưa được gán vào kỳ thi đua này"
+    - Auto-selects user's assigned cluster or falls back to first cluster in period
+  - **Cleanup**: Removed broken `CriteriaManagement.tsx` using deprecated schema with CriteriaGroup concept
+- **Technical Details**:
+  - Files changed: `server/routes.ts`, `client/src/pages/CriteriaTreeManagement.tsx`, `client/src/pages/CriteriaScoring.tsx`, `client/src/App.tsx`
+  - Query gating prevents premature data loading when cluster not selected
+  - Cache keys segmented per cluster: `["/api/criteria-results", unitId, periodId, clusterId]`
+  - All LSP diagnostics clean, workflow running without errors
+  - Architect review passed: "Period → Cluster → Scoring data works end-to-end with proper gating"
+- **Impact**: UX now aligns with operational workflow, making it intuitive for users to select period first then see available clusters
+
 ### 2025-11-16: Migrated Criteria System from Year-Based to Period-Based Filtering
 - **Problem**: Criteria management used year-based filtering, but business requirement is one year can have multiple evaluation periods with different criteria sets per cluster. Year-based approach was inadequate.
 - **Root Cause**: 

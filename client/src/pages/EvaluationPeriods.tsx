@@ -131,24 +131,47 @@ export default function EvaluationPeriods() {
     }
   }, [periods, selectedPeriodId]);
 
+  // Step 1b: Reset cluster and unit when period changes
+  useEffect(() => {
+    if (selectedPeriodId) {
+      setSelectedClusterId('');
+      setSelectedUnitId('');
+    }
+  }, [selectedPeriodId]);
+
   // Step 2: Auto-select cluster based on user role
   useEffect(() => {
-    if (!user || !selectedPeriod) return;
+    if (!user || !selectedPeriod || !clusters || clusters.length === 0) return;
 
-    // For unit users: use their cluster from user object
-    if (user.role === 'user' && user.clusterId && selectedClusterId !== user.clusterId) {
-      setSelectedClusterId(user.clusterId);
+    // Check if current cluster is valid for this period
+    const currentClusterValid = selectedClusterId && clusters.some(c => c.id === selectedClusterId);
+
+    // For unit users: use their cluster from user object (if it exists in period)
+    if (user.role === 'user' && user.clusterId) {
+      const userClusterValid = clusters.some(c => c.id === user.clusterId);
+      if (userClusterValid && selectedClusterId !== user.clusterId) {
+        setSelectedClusterId(user.clusterId);
+      } else if (!userClusterValid && !currentClusterValid) {
+        // User's cluster not in this period, select first available
+        setSelectedClusterId(clusters[0].id);
+      }
       return;
     }
 
-    // For cluster leaders: use their cluster
-    if (user.role === 'cluster_leader' && user.clusterId && selectedClusterId !== user.clusterId) {
-      setSelectedClusterId(user.clusterId);
+    // For cluster leaders: use their cluster (if it exists in period)
+    if (user.role === 'cluster_leader' && user.clusterId) {
+      const userClusterValid = clusters.some(c => c.id === user.clusterId);
+      if (userClusterValid && selectedClusterId !== user.clusterId) {
+        setSelectedClusterId(user.clusterId);
+      } else if (!userClusterValid && !currentClusterValid) {
+        // User's cluster not in this period, select first available
+        setSelectedClusterId(clusters[0].id);
+      }
       return;
     }
 
-    // For admin: auto-select first cluster in period
-    if (user.role === 'admin' && !selectedClusterId && clusters.length > 0) {
+    // For admin: auto-select first cluster if current selection is invalid
+    if (user.role === 'admin' && !currentClusterValid) {
       setSelectedClusterId(clusters[0].id);
     }
   }, [user, selectedPeriod, clusters, selectedClusterId]);
@@ -157,15 +180,27 @@ export default function EvaluationPeriods() {
   useEffect(() => {
     if (!user || !selectedClusterId || !units || units.length === 0) return;
 
-    // For unit users: use their unit from user object
-    if (user.role === 'user' && user.unitId && selectedUnitId !== user.unitId) {
-      setSelectedUnitId(user.unitId);
+    // Get units in current cluster
+    const unitsInCluster = units.filter(u => u.clusterId === selectedClusterId);
+    if (unitsInCluster.length === 0) return;
+
+    // Check if current unit is valid for this cluster
+    const currentUnitValid = selectedUnitId && unitsInCluster.some(u => u.id === selectedUnitId);
+
+    // For unit users: use their unit from user object (if it exists in cluster)
+    if (user.role === 'user' && user.unitId) {
+      const userUnitValid = unitsInCluster.some(u => u.id === user.unitId);
+      if (userUnitValid && selectedUnitId !== user.unitId) {
+        setSelectedUnitId(user.unitId);
+      } else if (!userUnitValid && !currentUnitValid) {
+        // User's unit not in this cluster, select first available
+        setSelectedUnitId(unitsInCluster[0].id);
+      }
       return;
     }
 
-    // For cluster leaders and admin: auto-select first unit in selected cluster
-    const unitsInCluster = units.filter(u => u.clusterId === selectedClusterId);
-    if (unitsInCluster.length > 0 && !selectedUnitId) {
+    // For cluster leaders and admin: auto-select first unit if current selection is invalid
+    if (!currentUnitValid) {
       setSelectedUnitId(unitsInCluster[0].id);
     }
   }, [user, selectedClusterId, units, selectedUnitId]);

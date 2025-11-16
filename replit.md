@@ -5,6 +5,25 @@ This web application digitizes and streamlines the evaluation process for the Vi
 
 ## Recent Changes
 
+### 2025-11-16: Refactored Period Filter from Year-Based to Period Name-Based
+- **Problem**: User requirement - one year can have multiple evaluation periods for multiple clusters, each with different criteria. Year-based filtering was ambiguous.
+- **Root Cause**: 
+  - Frontend filtered by year then auto-selected first period
+  - When user changed period, stale cluster/unit selections persisted
+  - Summary query loaded invalid data (cluster/unit not in new period)
+- **Solution**:
+  - Removed `selectedYear` state and `availableYears` memoization
+  - Changed filter UI from "Năm thi đua" (Year) to "Kỳ thi đua" (Period Name) dropdown
+  - Added Step 1b: Reset cluster/unit to empty when period changes
+  - Enhanced Step 2: Validate selected cluster exists in new period's clusters array
+  - Enhanced Step 3: Validate selected unit exists in new cluster's units array
+  - Auto-selection now properly falls back to first valid cluster/unit
+- **Technical Details**:
+  - Direct period selection via dropdown showing period names
+  - Auto-selection flow: period change → reset cluster/unit → validate & auto-select → load summary
+  - Architect-reviewed validation logic prevents stale data issues
+- **Impact**: Users can now clearly select specific evaluation periods, supporting multiple periods per year with different cluster assignments
+
 ### 2025-11-16: Fixed Period Filtering to Support Many-to-Many with Clusters
 - **Problem**: Backend was filtering periods incorrectly, not respecting the many-to-many relationship via `evaluationPeriodClusters` junction table
 - **Root Cause**: 

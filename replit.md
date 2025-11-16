@@ -5,6 +5,25 @@ This web application digitizes and streamlines the evaluation process for the Vi
 
 ## Recent Changes
 
+### 2025-11-16: Fixed Period Filtering to Support Many-to-Many with Clusters
+- **Problem**: Backend was filtering periods incorrectly, not respecting the many-to-many relationship via `evaluationPeriodClusters` junction table
+- **Root Cause**: 
+  - Backend `storage.getEvaluationPeriods(clusterId)` used old direct `period.clusterId` field
+  - Frontend interface had incorrect `period.clusterId` property
+  - Frontend `filteredPeriods` was trying to filter by cluster (should only filter by year)
+- **Solution**:
+  - Updated `storage.getEvaluationPeriods()` to use drizzle's `inArray` with evaluationPeriodClusters JOIN
+  - Admin (no clusterId): returns ALL periods
+  - Non-admin (with clusterId): returns only periods assigned via junction table
+  - Removed `period.clusterId` from frontend EvaluationSummary interface
+  - Updated `filteredPeriods` to only filter by year (backend handles cluster filtering)
+- **Security**: Route guard at lines 915-917 ensures non-admin users without clusterId get 403 before calling storage
+- **Technical Details**:
+  - Backend query: `SELECT * FROM evaluation_periods WHERE id IN (SELECT period_id FROM evaluation_period_clusters WHERE cluster_id = ?)`
+  - Frontend auto-selection now respects backend-filtered periods
+  - LSP errors resolved by adding `inArray` import from drizzle-orm
+- **Impact**: Periods now correctly filtered by cluster assignment, supporting multiple clusters per period
+
 ### 2025-11-16: Refactored EvaluationPeriods Component with Auto-Selection Logic
 - **Problem**: Unit users needed auto-detection of their cluster and unit to display appropriate criteria table for self-scoring
 - **Root Cause**: State initialization lacked proper dependency order, causing race conditions and incorrect auto-selection

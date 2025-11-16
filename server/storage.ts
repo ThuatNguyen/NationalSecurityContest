@@ -75,6 +75,32 @@ export interface IStorage {
   // Recalculation (transactional)
   recalculateEvaluationScoresTx(evaluationId: string): Promise<{ scoresUpdated: number }>;
   
+  // NEW EVALUATION SUMMARY METHOD - Tree-based
+  getEvaluationSummaryTree(periodId: string, unitId: string): Promise<{
+    period: EvaluationPeriod;
+    evaluation: Evaluation | null;
+    criteriaGroups: Array<{
+      id: string;
+      name: string;
+      displayOrder: number;
+      criteria: Array<{
+        id: string;
+        name: string;
+        maxScore: number;
+        displayOrder: number;
+        selfScore?: number;
+        selfScoreFile?: string | null;
+        review1Score?: number;
+        review1Comment?: string | null;
+        review1File?: string | null;
+        review2Score?: number;
+        review2Comment?: string | null;
+        review2File?: string | null;
+        finalScore?: number;
+      }>;
+    }>;
+  } | null>;
+  
   // OLD EVALUATION SUMMARY METHOD - DISABLED
   // This method uses the old flat criteria_groups table structure
   /*
@@ -628,6 +654,69 @@ export class DatabaseStorage implements IStorage {
       
       return { scoresUpdated: scores.length };
     });
+  }
+
+  // NEW EVALUATION SUMMARY METHOD - Tree-based criteria
+  async getEvaluationSummaryTree(periodId: string, unitId: string) {
+    // Get evaluation period
+    const period = await this.getEvaluationPeriod(periodId);
+    if (!period) return null;
+
+    // Get evaluation (or return null if not exists yet)
+    const evaluation = await this.getEvaluationByPeriodUnit(periodId, unitId) || null;
+
+    // Get criteria tree for this period's year and cluster
+    const criteriaTreeStorage = (await import('./criteriaTreeStorage')).criteriaTreeStorage;
+    const criteriaTree = await criteriaTreeStorage.getCriteriaTree(period.year, period.clusterId);
+
+    // Get all scores for this evaluation
+    const scores = evaluation ? await this.getScores(evaluation.id) : [];
+    const scoresMap = new Map(scores.map(s => [s.criteriaId, s]));
+
+    // Transform tree into flat groups by level 1 nodes
+    const flattenTree = (node: any, parentPath: string = ''): any[] => {
+      const currentPath = parentPath ? `${parentPath}.${node.orderIndex}` : node.code || node.id.substring(0, 8);
+      const score = scoresMap.get(node.id);
+
+      const flatNode = {
+        id: node.id,
+        name: node.name,
+        maxScore: parseFloat(node.maxScore),
+        displayOrder: node.orderIndex,
+        level: node.level,
+        code: node.code || currentPath,
+        selfScore: score?.selfScore ? parseFloat(score.selfScore) : undefined,
+        selfScoreFile: score?.selfScoreFile || null,
+        review1Score: score?.review1Score ? parseFloat(score.review1Score) : undefined,
+        review1Comment: score?.review1Comment || null,
+        review1File: score?.review1File || null,
+        review2Score: score?.review2Score ? parseFloat(score.review2Score) : undefined,
+        review2Comment: score?.review2Comment || null,
+        review2File: score?.review2File || null,
+        finalScore: score?.finalScore ? parseFloat(score.finalScore) : undefined,
+      };
+
+      // Recursively flatten children
+      const childrenFlat = (node.children || []).flatMap((child: any) => 
+        flattenTree(child, currentPath)
+      );
+
+      return [flatNode, ...childrenFlat];
+    };
+
+    // Group by level 1 nodes
+    const criteriaGroups = criteriaTree.map((level1Node, index) => ({
+      id: level1Node.id,
+      name: level1Node.name,
+      displayOrder: level1Node.orderIndex,
+      criteria: flattenTree(level1Node)
+    }));
+
+    return {
+      period,
+      evaluation,
+      criteriaGroups,
+    };
   }
 }
 

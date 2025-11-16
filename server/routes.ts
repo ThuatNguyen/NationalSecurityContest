@@ -1006,6 +1006,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // NEW EVALUATION SUMMARY ENDPOINT - Tree-based criteria
+  app.get("/api/evaluation-periods/:periodId/units/:unitId/summary", requireAuth, async (req, res, next) => {
+    try {
+      const { periodId, unitId } = req.params;
+      
+      // Verify unit exists and check access permissions
+      const unit = await storage.getUnit(unitId);
+      if (!unit) {
+        return res.status(404).json({ message: "Không tìm thấy đơn vị" });
+      }
+      
+      // Role-based access control
+      if (req.user!.role !== "admin") {
+        if (req.user!.role === "cluster_leader" && unit.clusterId !== req.user!.clusterId) {
+          return res.status(403).json({ message: "Bạn chỉ có thể xem dữ liệu của cụm mình" });
+        }
+        
+        if (req.user!.role === "user" && unitId !== req.user!.unitId) {
+          return res.status(403).json({ message: "Bạn chỉ có thể xem dữ liệu của đơn vị mình" });
+        }
+      }
+      
+      const summary = await storage.getEvaluationSummaryTree(periodId, unitId);
+      if (!summary) {
+        return res.status(404).json({ message: "Không tìm thấy kỳ thi đua" });
+      }
+      
+      res.json(summary);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   // OLD EVALUATION SUMMARY ENDPOINT - DISABLED
   // This endpoint uses the old flat criteria_groups table structure
   /*
@@ -1613,9 +1646,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Parse and validate scores array
+      // Parse and validate scores array - EXTENDED for all criteria types
       const scoresData = z.array(z.object({
         criteriaId: z.string(),
+        // Input fields for different criteria types
+        actualValue: z.number().optional(),      // Type 1 (Quantitative) & Type 3 (Fixed count)
+        isAchieved: z.boolean().optional(),      // Type 2 (Qualitative)
+        bonusCount: z.number().optional(),       // Type 4 (+/-)
+        penaltyCount: z.number().optional(),     // Type 4 (+/-)
+        calculatedScore: z.number().optional(),  // Auto-calculated score
+        // Review fields
         selfScore: z.number().optional(),
         selfScoreFile: z.string().optional(),
         review1Score: z.number().optional(),
@@ -1687,6 +1727,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Prepare update data with timestamps
           const updateData: any = {};
           
+          // Update input fields for different criteria types
+          if (scoreData.actualValue !== undefined) {
+            updateData.actualValue = scoreData.actualValue.toString();
+          }
+          if (scoreData.isAchieved !== undefined) {
+            updateData.isAchieved = scoreData.isAchieved ? 1 : 0;
+          }
+          if (scoreData.bonusCount !== undefined) {
+            updateData.bonusCount = scoreData.bonusCount;
+          }
+          if (scoreData.penaltyCount !== undefined) {
+            updateData.penaltyCount = scoreData.penaltyCount;
+          }
+          if (scoreData.calculatedScore !== undefined) {
+            updateData.calculatedScore = scoreData.calculatedScore.toString();
+          }
+          
           if (scoreData.selfScore !== undefined) {
             updateData.selfScore = scoreData.selfScore.toString();
             updateData.selfScoreDate = new Date();
@@ -1733,6 +1790,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
             evaluationId: req.params.id,
             criteriaId: scoreData.criteriaId,
           };
+          
+          // Set input fields for different criteria types
+          if (scoreData.actualValue !== undefined) {
+            newScore.actualValue = scoreData.actualValue.toString();
+          }
+          if (scoreData.isAchieved !== undefined) {
+            newScore.isAchieved = scoreData.isAchieved ? 1 : 0;
+          }
+          if (scoreData.bonusCount !== undefined) {
+            newScore.bonusCount = scoreData.bonusCount;
+          }
+          if (scoreData.penaltyCount !== undefined) {
+            newScore.penaltyCount = scoreData.penaltyCount;
+          }
+          if (scoreData.calculatedScore !== undefined) {
+            newScore.calculatedScore = scoreData.calculatedScore.toString();
+          }
           
           if (scoreData.selfScore !== undefined) {
             newScore.selfScore = scoreData.selfScore.toString();

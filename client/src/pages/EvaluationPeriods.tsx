@@ -771,10 +771,19 @@ export default function EvaluationPeriods() {
                           {groupTotals.finalScore.toFixed(2)}
                         </td>
                       </tr>
-                      {group.criteria.map((item, itemIndex) => (
+                      {group.criteria.map((item, itemIndex) => {
+                        // Calculate indent based on level (level 1 = no indent, level 2 = 1rem, level 3 = 2rem, etc.)
+                        const indentLevel = (item.level || 1) - 1;
+                        const indentPx = 8 + (indentLevel * 24); // Base 8px + 24px per level
+                        
+                        return (
                         <tr key={item.id} className="border-b hover-elevate" data-testid={`row-criteria-${item.id}`}>
-                          <td className="px-4 py-3 text-sm text-center">{groupIndex * 10 + itemIndex + 1}</td>
-                          <td className="px-4 py-3 text-sm pl-8">{item.name}</td>
+                          <td className="px-4 py-3 text-sm text-center">{item.code || `${groupIndex + 1}.${itemIndex + 1}`}</td>
+                          <td className="px-4 py-3 text-sm" style={{ paddingLeft: `${indentPx}px` }}>
+                            <span className={indentLevel > 0 ? 'text-muted-foreground' : 'font-medium'}>
+                              {item.name}
+                            </span>
+                          </td>
                           <td className="px-4 py-3 text-sm text-center font-medium" data-testid={`text-maxscore-${item.id}`}>
                             {item.maxScore}
                           </td>
@@ -856,7 +865,8 @@ export default function EvaluationPeriods() {
                             </span>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </Fragment>
                   );
                 })}

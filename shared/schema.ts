@@ -271,6 +271,14 @@ export const scores = pgTable("scores", {
   evaluationId: varchar("evaluation_id").notNull().references(() => evaluations.id, { onDelete: "cascade" }),
   criteriaId: varchar("criteria_id").notNull().references(() => criteria.id, { onDelete: "cascade" }),
   
+  // Input fields for different criteria types
+  actualValue: decimal("actual_value", { precision: 10, scale: 2 }), // Type 1 (Quantitative): số liệu thực hiện
+  count: integer("count"), // Type 3 (Fixed): số lần đạt
+  bonusCount: integer("bonus_count").default(0), // Type 4 (+/-): số lần cộng
+  penaltyCount: integer("penalty_count").default(0), // Type 4 (+/-): số lần trừ
+  isAchieved: integer("is_achieved"), // Type 2 (Qualitative): 1=đạt, 0=không đạt
+  calculatedScore: decimal("calculated_score", { precision: 7, scale: 2 }), // Điểm tự động tính
+  
   // Self-scoring stage
   selfScore: decimal("self_score", { precision: 5, scale: 2 }),
   selfScoreFile: text("self_score_file"),

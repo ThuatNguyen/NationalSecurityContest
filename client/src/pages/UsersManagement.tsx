@@ -105,8 +105,27 @@ export default function UsersManagement() {
     queryKey: ['/api/clusters'],
   });
 
+  // Determine forced cluster for cluster_leader
+  const forcedClusterId = currentUser?.role === "cluster_leader" ? currentUser.clusterId || null : null;
+  
+  // Determine effective cluster ID for fetching units
+  const effectiveClusterId = formData.clusterId || forcedClusterId;
+  
+  // Fetch units dynamically based on selected cluster
   const { data: allUnits = [] } = useQuery<Unit[]>({
-    queryKey: ['/api/units'],
+    queryKey: ['/api/units', effectiveClusterId],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (effectiveClusterId) {
+        params.append('clusterId', effectiveClusterId);
+      }
+      const response = await fetch(`/api/units?${params.toString()}`, {
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to fetch units');
+      return response.json();
+    },
+    enabled: !!effectiveClusterId || currentUser?.role === 'admin', // Fetch when cluster selected or user is admin
   });
 
   const createMutation = useMutation({
@@ -300,7 +319,6 @@ export default function UsersManagement() {
   // Cluster leader restrictions
   const isClusterLeader = currentUser?.role === "cluster_leader";
   const isCreating = !selectedUser;
-  const forcedClusterId = isClusterLeader ? currentUser?.clusterId ?? "" : "";
   
   // Auto-fill cluster for cluster_leader when creating
   useEffect(() => {
@@ -321,13 +339,8 @@ export default function UsersManagement() {
     ];
   }, [isClusterLeader, isCreating]);
 
-  // Filter units by effective cluster
-  const effectiveClusterId = formData.clusterId || forcedClusterId;
-  const availableUnits = useMemo(() => {
-    return effectiveClusterId 
-      ? allUnits.filter(u => u.clusterId === effectiveClusterId)
-      : allUnits;
-  }, [allUnits, effectiveClusterId]);
+  // Units are already filtered by API based on effectiveClusterId
+  const availableUnits = allUnits;
 
   return (
     <div className="space-y-6">

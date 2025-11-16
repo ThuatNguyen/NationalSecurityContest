@@ -63,41 +63,162 @@ export const insertUserSchema = createInsertSchema(users).omit({
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
-// Criteria Groups (Nhóm tiêu chí)
-export const criteriaGroups = pgTable("criteria_groups", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  displayOrder: integer("display_order").notNull(),
-  year: integer("year").notNull(),
-  clusterId: varchar("cluster_id").notNull().references(() => clusters.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-export const insertCriteriaGroupSchema = createInsertSchema(criteriaGroups).omit({
-  id: true,
-  createdAt: true,
-});
-
-export type InsertCriteriaGroup = z.infer<typeof insertCriteriaGroupSchema>;
-export type CriteriaGroup = typeof criteriaGroups.$inferSelect;
-
-// Criteria (Tiêu chí cụ thể)
+// Criteria (Tiêu chí dạng cây n cấp)
 export const criteria = pgTable("criteria", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  parentId: varchar("parent_id").references((): any => criteria.id, { onDelete: "cascade" }),
+  level: integer("level").notNull().default(1), // 1, 2, 3, 4...
   name: text("name").notNull(),
-  groupId: varchar("group_id").notNull().references(() => criteriaGroups.id, { onDelete: "cascade" }),
-  maxScore: decimal("max_score", { precision: 5, scale: 2 }).notNull(),
-  displayOrder: integer("display_order").notNull(),
+  code: text("code"), // Mã tiêu chí (VD: I, II, 1.1, 1.2.3)
+  description: text("description"),
+  maxScore: decimal("max_score", { precision: 7, scale: 2 }).notNull().default('0'),
+  
+  // Loại tiêu chí (0=tiêu chí cha/không chấm điểm, 1-4=tiêu chí lá/có chấm điểm)
+  criteriaType: integer("criteria_type").notNull().default(0), // 0=cha, 1=định lượng, 2=định tính, 3=chấm thẳng, 4=cộng/trừ
+  
+  // Cho tiêu chí định lượng (chỉ khi criteriaType=1)
+  formulaType: integer("formula_type"), // 1=không đạt (<100%), 2=đạt đủ (=100%), 3=dẫn đầu, 4=vượt nhưng không dẫn đầu
+  
+  orderIndex: integer("order_index").notNull().default(0),
+  
+  // Áp dụng theo năm và cụm
+  year: integer("year").notNull(), // Năm áp dụng (VD: 2025)
+  clusterId: varchar("cluster_id").references(() => clusters.id, { onDelete: "cascade" }), // Cụm áp dụng, null=tất cả cụm
+  
+  isActive: integer("is_active").notNull().default(1), // 1=active, 0=inactive
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Criteria Formula - Chi tiết cho tiêu chí định lượng
+export const criteriaFormula = pgTable("criteria_formula", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  criteriaId: varchar("criteria_id").notNull().references(() => criteria.id, { onDelete: "cascade" }).unique(),
+  targetRequired: integer("target_required").notNull().default(1), // 1=bắt buộc giao chỉ tiêu, 0=không
+  defaultTarget: decimal("default_target", { precision: 10, scale: 2 }),
+  unit: text("unit"), // đơn vị tính (%, vụ, lần, người...)
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Criteria Fixed Score - Chi tiết cho tiêu chí chấm thẳng
+export const criteriaFixedScore = pgTable("criteria_fixed_score", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  criteriaId: varchar("criteria_id").notNull().references(() => criteria.id, { onDelete: "cascade" }).unique(),
+  pointPerUnit: decimal("point_per_unit", { precision: 7, scale: 2 }).notNull(), // điểm/lần
+  maxScoreLimit: decimal("max_score_limit", { precision: 7, scale: 2 }), // giới hạn điểm tối đa (optional)
+  unit: text("unit"), // đơn vị (lần, người, ...)
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Criteria Bonus Penalty - Chi tiết cho tiêu chí +/-
+export const criteriaBonusPenalty = pgTable("criteria_bonus_penalty", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  criteriaId: varchar("criteria_id").notNull().references(() => criteria.id, { onDelete: "cascade" }).unique(),
+  bonusPoint: decimal("bonus_point", { precision: 7, scale: 2 }), // điểm cộng/lần
+  penaltyPoint: decimal("penalty_point", { precision: 7, scale: 2 }), // điểm trừ/lần
+  minScore: decimal("min_score", { precision: 7, scale: 2 }), // điểm tối thiểu
+  maxScore: decimal("max_score", { precision: 7, scale: 2 }), // điểm tối đa
+  unit: text("unit"), // đơn vị
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Criteria Targets - Giao chỉ tiêu cho từng đơn vị
+export const criteriaTargets = pgTable("criteria_targets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  criteriaId: varchar("criteria_id").notNull().references(() => criteria.id, { onDelete: "cascade" }),
+  unitId: varchar("unit_id").notNull().references(() => units.id, { onDelete: "cascade" }),
+  year: integer("year").notNull(),
+  targetValue: decimal("target_value", { precision: 10, scale: 2 }).notNull(),
+  note: text("note"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  uniqueTargetPerUnit: unique().on(table.criteriaId, table.unitId, table.year),
+}));
+
+// Criteria Results - Lưu kết quả chấm điểm
+export const criteriaResults = pgTable("criteria_results", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  criteriaId: varchar("criteria_id").notNull().references(() => criteria.id, { onDelete: "cascade" }),
+  unitId: varchar("unit_id").notNull().references(() => units.id, { onDelete: "cascade" }),
+  year: integer("year").notNull(),
+  periodId: varchar("period_id").references(() => evaluationPeriods.id, { onDelete: "cascade" }),
+  
+  // Dữ liệu nhập vào
+  actualValue: decimal("actual_value", { precision: 10, scale: 2 }), // Giá trị thực tế (cho định lượng)
+  selfScore: decimal("self_score", { precision: 7, scale: 2 }), // Điểm tự chấm (cho định tính, chấm thẳng, +/-)
+  bonusCount: integer("bonus_count").default(0), // Số lần cộng (cho +/-)
+  penaltyCount: integer("penalty_count").default(0), // Số lần trừ (cho +/-)
+  
+  // Điểm được tính
+  calculatedScore: decimal("calculated_score", { precision: 7, scale: 2 }), // Điểm hệ thống tính
+  clusterScore: decimal("cluster_score", { precision: 7, scale: 2 }), // Điểm cụm chấm
+  finalScore: decimal("final_score", { precision: 7, scale: 2 }), // Điểm cuối cùng
+  
+  note: text("note"),
+  evidenceFile: text("evidence_file"), // File minh chứng
+  
+  status: text("status").notNull().default("draft"), // draft, submitted, reviewed, finalized
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  uniqueResultPerUnit: unique().on(table.criteriaId, table.unitId, table.year),
+}));
+
+// Insert schemas for new tables
 export const insertCriteriaSchema = createInsertSchema(criteria).omit({
   id: true,
   createdAt: true,
+  updatedAt: true,
 });
 
+export const insertCriteriaFormulaSchema = createInsertSchema(criteriaFormula).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertCriteriaFixedScoreSchema = createInsertSchema(criteriaFixedScore).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertCriteriaBonusPenaltySchema = createInsertSchema(criteriaBonusPenalty).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertCriteriaTargetSchema = createInsertSchema(criteriaTargets).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertCriteriaResultSchema = createInsertSchema(criteriaResults).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Types
 export type InsertCriteria = z.infer<typeof insertCriteriaSchema>;
 export type Criteria = typeof criteria.$inferSelect;
+export type CriteriaWithChildren = Criteria & { children?: CriteriaWithChildren[] };
+
+export type InsertCriteriaFormula = z.infer<typeof insertCriteriaFormulaSchema>;
+export type CriteriaFormula = typeof criteriaFormula.$inferSelect;
+
+export type InsertCriteriaFixedScore = z.infer<typeof insertCriteriaFixedScoreSchema>;
+export type CriteriaFixedScore = typeof criteriaFixedScore.$inferSelect;
+
+export type InsertCriteriaBonusPenalty = z.infer<typeof insertCriteriaBonusPenaltySchema>;
+export type CriteriaBonusPenalty = typeof criteriaBonusPenalty.$inferSelect;
+
+export type InsertCriteriaTarget = z.infer<typeof insertCriteriaTargetSchema>;
+export type CriteriaTarget = typeof criteriaTargets.$inferSelect;
+
+export type InsertCriteriaResult = z.infer<typeof insertCriteriaResultSchema>;
+export type CriteriaResult = typeof criteriaResults.$inferSelect;
 
 // Evaluation Periods (Kỳ thi đua)
 export const evaluationPeriods = pgTable("evaluation_periods", {
@@ -144,7 +265,7 @@ export const insertEvaluationSchema = createInsertSchema(evaluations).omit({
 export type InsertEvaluation = z.infer<typeof insertEvaluationSchema>;
 export type Evaluation = typeof evaluations.$inferSelect;
 
-// Scores (Điểm cho từng tiêu chí - multi-stage workflow)
+// Scores (Điểm cho từng tiêu chí - multi-stage workflow) - LEGACY TABLE, sẽ được thay thế bởi criteriaResults
 export const scores = pgTable("scores", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   evaluationId: varchar("evaluation_id").notNull().references(() => evaluations.id, { onDelete: "cascade" }),

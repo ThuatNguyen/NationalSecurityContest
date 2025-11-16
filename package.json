@@ -10,7 +10,8 @@
     "check": "tsc",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
-    "db:seed": "NODE_ENV=development tsx server/seed.ts"
+    "db:seed": "NODE_ENV=development tsx server/seed.ts",
+    "db:seed:criteria": "NODE_ENV=development tsx server/seedCriteriaTree.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

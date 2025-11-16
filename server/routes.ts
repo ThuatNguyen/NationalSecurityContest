@@ -12,7 +12,6 @@ import {
   insertUserSchema, 
   insertClusterSchema,
   insertUnitSchema,
-  insertCriteriaGroupSchema,
   insertCriteriaSchema,
   insertEvaluationPeriodSchema,
   insertEvaluationSchema,
@@ -678,7 +677,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Criteria Group routes
+  // OLD CRITERIA GROUPS & CRITERIA ROUTES - DISABLED - Now using /api/criteria/tree endpoints
+  // These routes use the old flat criteria_groups table structure which has been replaced
+  // with a tree-based criteria system. See server/criteriaTreeRoutes.ts for new endpoints.
+  
+  /*
   app.get("/api/criteria-groups", requireAuth, async (req, res, next) => {
     try {
       const { clusterId, year } = req.query;
@@ -702,6 +705,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // OLD CRITERIA GROUPS & CRITERIA ROUTES - CONTINUED
+  // These routes use the old flat criteria_groups table structure which has been replaced
+  // with a tree-based criteria system. See server/criteriaTreeRoutes.ts for new endpoints.
+  
+  /*
   app.post("/api/criteria-groups", requireRole("admin", "cluster_leader"), async (req, res, next) => {
     try {
       const groupData = insertCriteriaGroupSchema.parse(req.body);
@@ -890,6 +898,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       next(error);
     }
   });
+  */
 
   // Evaluation Period routes
   app.get("/api/evaluation-periods", requireAuth, async (req, res, next) => {
@@ -997,7 +1006,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Aggregated endpoint for evaluation summary (period + evaluation + scores + criteria)
+  // OLD EVALUATION SUMMARY ENDPOINT - DISABLED
+  // This endpoint uses the old flat criteria_groups table structure
+  /*
   app.get("/api/evaluation-periods/:periodId/units/:unitId/summary", requireAuth, async (req, res, next) => {
     try {
       const { periodId, unitId } = req.params;
@@ -1029,6 +1040,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       next(error);
     }
   });
+  */
 
   // Evaluation routes
   app.get("/api/evaluations", requireAuth, async (req, res, next) => {
@@ -1753,3 +1765,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   return httpServer;
 }
+
+// Import and setup criteria tree routes
+import { setupCriteriaTreeRoutes } from "./criteriaTreeRoutes";
+export { setupCriteriaTreeRoutes };

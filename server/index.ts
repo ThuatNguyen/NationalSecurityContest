@@ -4,6 +4,7 @@ import connectPgSimple from "connect-pg-simple";
 import passport from "passport";
 import pg from "pg";
 import { registerRoutes } from "./routes";
+import { setupCriteriaTreeRoutes } from "./criteriaTreeRoutes";
 import { setupVite, serveStatic, log } from "./vite";
 
 const { Pool } = pg;
@@ -85,6 +86,9 @@ app.use((req, res, next) => {
 
 (async () => {
   const server = await registerRoutes(app);
+  
+  // Setup criteria tree routes
+  setupCriteriaTreeRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

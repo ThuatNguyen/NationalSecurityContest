@@ -5,8 +5,8 @@ import type {
   User, InsertUser,
   Cluster, InsertCluster,
   Unit, InsertUnit,
-  CriteriaGroup, InsertCriteriaGroup,
-  Criteria, InsertCriteria,
+  // CriteriaGroup, InsertCriteriaGroup, // OLD - removed with tree refactor
+  // Criteria, InsertCriteria, // OLD - removed with tree refactor
   EvaluationPeriod, InsertEvaluationPeriod,
   Evaluation, InsertEvaluation,
   Score, InsertScore
@@ -35,19 +35,22 @@ export interface IStorage {
   updateUnit(id: string, unit: Partial<InsertUnit>): Promise<Unit | undefined>;
   deleteUnit(id: string): Promise<void>;
   
-  // Criteria Groups
+  // OLD CRITERIA GROUPS & CRITERIA METHODS - DISABLED
+  // These methods use the old flat criteria_groups table structure
+  // See server/criteriaTreeStorage.ts for new tree-based methods
+  /*
   getCriteriaGroups(clusterId: string, year: number): Promise<CriteriaGroup[]>;
   getCriteriaGroup(id: string): Promise<CriteriaGroup | undefined>;
   createCriteriaGroup(group: InsertCriteriaGroup): Promise<CriteriaGroup>;
   updateCriteriaGroup(id: string, group: Partial<InsertCriteriaGroup>): Promise<CriteriaGroup | undefined>;
   deleteCriteriaGroup(id: string): Promise<void>;
   
-  // Criteria
   getCriteria(groupId: string): Promise<Criteria[]>;
   getCriteriaById(id: string): Promise<Criteria | undefined>;
   createCriteria(criteria: InsertCriteria): Promise<Criteria>;
   updateCriteria(id: string, criteria: Partial<InsertCriteria>): Promise<Criteria | undefined>;
   deleteCriteria(id: string): Promise<void>;
+  */
   
   // Evaluation Periods
   getEvaluationPeriods(clusterId?: string): Promise<EvaluationPeriod[]>;
@@ -72,7 +75,9 @@ export interface IStorage {
   // Recalculation (transactional)
   recalculateEvaluationScoresTx(evaluationId: string): Promise<{ scoresUpdated: number }>;
   
-  // Evaluation Summary (aggregated data for evaluation periods page)
+  // OLD EVALUATION SUMMARY METHOD - DISABLED
+  // This method uses the old flat criteria_groups table structure
+  /*
   getEvaluationSummary(periodId: string, unitId: string): Promise<{
     period: EvaluationPeriod;
     evaluation: Evaluation | null;
@@ -97,6 +102,7 @@ export interface IStorage {
       }>;
     }>;
   } | null>;
+  */
 }
 
 export class DatabaseStorage implements IStorage {
@@ -297,7 +303,10 @@ export class DatabaseStorage implements IStorage {
     await db.delete(schema.units).where(eq(schema.units.id, id));
   }
 
-  // Criteria Groups
+  // OLD CRITERIA GROUPS & CRITERIA IMPLEMENTATIONS - DISABLED
+  // These methods use the old flat criteria_groups table structure
+  // See server/criteriaTreeStorage.ts for new tree-based methods
+  /*
   async getCriteriaGroups(clusterId: string, year: number): Promise<CriteriaGroup[]> {
     return await db.select().from(schema.criteriaGroups)
       .where(and(
@@ -325,7 +334,6 @@ export class DatabaseStorage implements IStorage {
     await db.delete(schema.criteriaGroups).where(eq(schema.criteriaGroups.id, id));
   }
 
-  // Criteria
   async getCriteria(groupId: string): Promise<Criteria[]> {
     return await db.select().from(schema.criteria).where(eq(schema.criteria.groupId, groupId));
   }
@@ -348,6 +356,7 @@ export class DatabaseStorage implements IStorage {
   async deleteCriteria(id: string): Promise<void> {
     await db.delete(schema.criteria).where(eq(schema.criteria.id, id));
   }
+  */
 
   // Evaluation Periods
   async getEvaluationPeriods(clusterId?: string): Promise<EvaluationPeriod[]> {
@@ -437,6 +446,9 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
+  // OLD EVALUATION SUMMARY IMPLEMENTATION - DISABLED
+  // This method uses the old flat criteria_groups table structure
+  /*
   async getEvaluationSummary(periodId: string, unitId: string) {
     // 1. Fetch period (fail fast if missing)
     const period = await this.getEvaluationPeriod(periodId);
@@ -548,6 +560,7 @@ export class DatabaseStorage implements IStorage {
       criteriaGroups,
     };
   }
+  */
 
   // Recalculate finalScores (transactional)
   async recalculateEvaluationScoresTx(evaluationId: string): Promise<{ scoresUpdated: number }> {

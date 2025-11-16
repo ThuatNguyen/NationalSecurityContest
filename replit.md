@@ -5,6 +5,27 @@ This web application digitizes and streamlines the evaluation process for the Vi
 
 ## Recent Changes
 
+### 2025-11-16: Refactored EvaluationPeriods Component with Auto-Selection Logic
+- **Problem**: Unit users needed auto-detection of their cluster and unit to display appropriate criteria table for self-scoring
+- **Root Cause**: State initialization lacked proper dependency order, causing race conditions and incorrect auto-selection
+- **Solution**: 
+  - Added `level` and `code` fields to Criteria interface for hierarchical criteria tree support
+  - Added `selectedYear` state (initialized to current year) for better year-based filtering
+  - Consolidated duplicate `evaluation-periods` queries into single source of truth
+  - Refactored auto-selection logic with clear step-by-step initialization:
+    - Step 1: Auto-select year based on available periods
+    - Step 2: Auto-select period ID when periods change
+    - Step 3: Auto-select cluster based on user role (admin can change, unit users locked to their cluster)
+    - Step 4: Auto-select unit based on user role (admin can change, unit users locked to their unit)
+  - Filters are read-only for unit users, ensuring they only see their own unit's criteria
+  - Summary query fires only when both period and unit are ready, ensuring immediate criteria table load
+- **Technical Details**:
+  - Removed `EvaluationPeriodsNew.tsx` (unused legacy component)
+  - Updated `App.tsx` to import from `EvaluationPeriods.tsx`
+  - All LSP errors resolved
+  - Architect review passed with recommendations for future regression tests
+- **Impact**: Unit users can now login and immediately see their appropriate criteria table without manual filter selection
+
 ### 2025-01-13: Fixed File Attachment Access Issue
 - **Problem**: Users clicking file attachment icons got "file not found" error in new browser tab
 - **Root Cause**: Using `window.open()` to open files caused session cookies to not be sent properly in certain contexts

@@ -39,14 +39,11 @@ export function setupCriteriaTreeRoutes(app: Express) {
       const periodId = req.query.periodId as string;
       const clusterId = req.query.clusterId as string | undefined;
       
-      console.log("[DEBUG] GET /api/criteria/tree - periodId:", periodId, "clusterId:", clusterId);
-      
       if (!periodId) {
         return res.status(400).json({ message: "Thiếu periodId" });
       }
       
       const tree = await criteriaTreeStorage.getCriteriaTree(periodId, clusterId);
-      console.log("[DEBUG] Found", tree.length, "root criteria");
       res.json(tree);
     } catch (error) {
       next(error);

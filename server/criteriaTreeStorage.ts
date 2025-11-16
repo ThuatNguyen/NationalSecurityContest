@@ -21,26 +21,15 @@ export class CriteriaTreeStorage {
   // ============================================
   
     /**
-   * Lấy tất cả criteria theo year, clusterId và periodId (optional)
-   * Logic: Mỗi cụm có BỘ TIÊU CHÍ RIÊNG - chỉ lấy criteria có cluster_id = clusterId
-   * Nếu có periodId thì ưu tiên lấy criteria gắn với period đó, fallback về criteria không gắn period
+   * Lấy tất cả criteria theo periodId và clusterId (optional)
+   * Logic: Criteria được scope theo kỳ thi đua và cụm thi đua
    */
-  async getCriteria(year: number, clusterId?: string, periodId?: string): Promise<Criteria[]> {
-    const conditions: any[] = [eq(schema.criteria.year, year)];
+  async getCriteria(periodId: string, clusterId?: string): Promise<Criteria[]> {
+    const conditions: any[] = [eq(schema.criteria.periodId, periodId)];
     
     if (clusterId) {
-      // CHỈ lấy criteria của cụm cụ thể (không lấy criteria có cluster_id = NULL)
+      // CHỈ lấy criteria của cụm cụ thể
       conditions.push(eq(schema.criteria.clusterId, clusterId));
-    }
-    
-    // Nếu có periodId thì lọc theo period hoặc lấy criteria chung (periodId = null)
-    if (periodId) {
-      conditions.push(
-        or(
-          eq(schema.criteria.periodId, periodId),
-          isNull(schema.criteria.periodId)
-        )
-      );
     }
     
     const result = await db
@@ -55,8 +44,8 @@ export class CriteriaTreeStorage {
   /**
    * Lấy cây tiêu chí đầy đủ (recursive tree structure)
    */
-  async getCriteriaTree(year: number, clusterId?: string, periodId?: string): Promise<CriteriaWithChildren[]> {
-    const allCriteria = await this.getCriteria(year, clusterId, periodId);
+  async getCriteriaTree(periodId: string, clusterId?: string): Promise<CriteriaWithChildren[]> {
+    const allCriteria = await this.getCriteria(periodId, clusterId);
     
     // Build tree recursively
     const buildTree = (parentId: string | null): CriteriaWithChildren[] => {
@@ -238,7 +227,7 @@ export class CriteriaTreeStorage {
       .insert(schema.criteriaTargets)
       .values(target)
       .onConflictDoUpdate({
-        target: [schema.criteriaTargets.criteriaId, schema.criteriaTargets.unitId, schema.criteriaTargets.year],
+        target: [schema.criteriaTargets.criteriaId, schema.criteriaTargets.unitId, schema.criteriaTargets.periodId],
         set: {
           targetValue: target.targetValue,
           note: target.note,
@@ -253,13 +242,13 @@ export class CriteriaTreeStorage {
   /**
    * Lấy chỉ tiêu của đơn vị
    */
-  async getCriteriaTargets(unitId: string, year: number): Promise<CriteriaTarget[]> {
+  async getCriteriaTargets(unitId: string, periodId: string): Promise<CriteriaTarget[]> {
     return await db
       .select()
       .from(schema.criteriaTargets)
       .where(and(
         eq(schema.criteriaTargets.unitId, unitId),
-        eq(schema.criteriaTargets.year, year)
+        eq(schema.criteriaTargets.periodId, periodId)
       ));
   }
   
@@ -275,7 +264,7 @@ export class CriteriaTreeStorage {
       .insert(schema.criteriaResults)
       .values(result)
       .onConflictDoUpdate({
-        target: [schema.criteriaResults.criteriaId, schema.criteriaResults.unitId, schema.criteriaResults.year],
+        target: [schema.criteriaResults.criteriaId, schema.criteriaResults.unitId, schema.criteriaResults.periodId],
         set: {
           actualValue: result.actualValue,
           selfScore: result.selfScore,
@@ -301,7 +290,7 @@ export class CriteriaTreeStorage {
   async calculateCriteriaScore(
     criteriaId: string,
     unitId: string,
-    year: number
+    periodId: string
   ): Promise<number> {
     // Get criteria info
     const criteria = await this.getCriteriaById(criteriaId);
@@ -314,7 +303,7 @@ export class CriteriaTreeStorage {
       .where(and(
         eq(schema.criteriaResults.criteriaId, criteriaId),
         eq(schema.criteriaResults.unitId, unitId),
-        eq(schema.criteriaResults.year, year)
+        eq(schema.criteriaResults.periodId, periodId)
       ))
       .limit(1);
     
@@ -331,7 +320,7 @@ export class CriteriaTreeStorage {
         .where(and(
           eq(schema.criteriaTargets.criteriaId, criteriaId),
           eq(schema.criteriaTargets.unitId, unitId),
-          eq(schema.criteriaTargets.year, year)
+          eq(schema.criteriaTargets.periodId, periodId)
         ))
         .limit(1);
       
@@ -359,7 +348,7 @@ export class CriteriaTreeStorage {
             .from(schema.criteriaResults)
             .where(and(
               eq(schema.criteriaResults.criteriaId, criteriaId),
-              eq(schema.criteriaResults.year, year),
+              eq(schema.criteriaResults.periodId, periodId),
               sql`${schema.criteriaResults.unitId} = ANY(${unitIds})`
             ));
           
@@ -399,7 +388,7 @@ export class CriteriaTreeStorage {
       .where(and(
         eq(schema.criteriaResults.criteriaId, criteriaId),
         eq(schema.criteriaResults.unitId, unitId),
-        eq(schema.criteriaResults.year, year)
+        eq(schema.criteriaResults.periodId, periodId)
       ));
     
     return calculatedScore;
@@ -408,26 +397,26 @@ export class CriteriaTreeStorage {
   /**
    * Lấy kết quả chấm điểm của đơn vị
    */
-  async getCriteriaResults(unitId: string, year: number): Promise<CriteriaResult[]> {
+  async getCriteriaResults(unitId: string, periodId: string): Promise<CriteriaResult[]> {
     return await db
       .select()
       .from(schema.criteriaResults)
       .where(and(
         eq(schema.criteriaResults.unitId, unitId),
-        eq(schema.criteriaResults.year, year)
+        eq(schema.criteriaResults.periodId, periodId)
       ));
   }
   
   /**
    * Tính tổng điểm của đơn vị (chỉ tính tiêu chí lá)
    */
-  async calculateUnitTotalScore(unitId: string, year: number): Promise<{
+  async calculateUnitTotalScore(unitId: string, periodId: string): Promise<{
     total: number;
     byType: { [key: number]: number };
     details: Array<{ criteriaId: string; criteriaName: string; score: number }>;
   }> {
-    const results = await this.getCriteriaResults(unitId, year);
-    const allCriteria = await this.getCriteria(year);
+    const results = await this.getCriteriaResults(unitId, periodId);
+    const allCriteria = await this.getCriteria(periodId);
     
     // Find leaf criteria (no children)
     const leafCriteriaIds = allCriteria

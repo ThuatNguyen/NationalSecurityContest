@@ -15,7 +15,7 @@ import CriteriaManagement from "@/pages/CriteriaManagement";
 import CriteriaTreeManagement from "@/pages/CriteriaTreeManagement";
 import CriteriaScoring from "@/pages/CriteriaScoring";
 import UsersManagement from "@/pages/UsersManagement";
-import EvaluationPeriods from "@/pages/EvaluationPeriodsNew";
+import EvaluationPeriods from "@/pages/EvaluationPeriods";
 import Reports from "@/pages/Reports";
 import CompetitionManagement from "@/pages/CompetitionManagement";
 import CompetitionDetail from "@/pages/CompetitionDetail";

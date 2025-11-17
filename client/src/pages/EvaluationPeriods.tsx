@@ -34,6 +34,7 @@ interface Criteria {
   name: string;
   code: string;
   level: number;
+  criteriaType: number; // 0 = parent/branch node, 1-4 = leaf node (scorable)
   maxScore: number;
   displayOrder: number;
   selfScore?: number;
@@ -641,28 +642,8 @@ export default function EvaluationPeriods() {
     );
   };
 
-  // Helper: Check if an item has children (is a parent/branch node)
-  const hasChildren = (item: Criteria, allItems: Criteria[], currentIndex: number) => {
-    const currentLevel = item.level || 1;
-    // Check if there's any item after this one with a higher level
-    for (let i = currentIndex + 1; i < allItems.length; i++) {
-      const nextItem = allItems[i];
-      const nextLevel = nextItem.level || 1;
-      
-      // If we find an item with same or lower level, we've finished this branch
-      if (nextLevel <= currentLevel) {
-        break;
-      }
-      
-      // If we find an item with higher level, this item has children
-      if (nextLevel > currentLevel) {
-        return true;
-      }
-    }
-    return false;
-  };
-
   // Helper: Calculate sum of children's scores (only leaf nodes to avoid double counting)
+  // A parent node has criteriaType = 0, leaf nodes have criteriaType = 1-4
   const calculateChildrenTotal = (item: Criteria, allItems: Criteria[], currentIndex: number, field: keyof Criteria) => {
     const currentLevel = item.level || 1;
     let total = 0;
@@ -677,10 +658,9 @@ export default function EvaluationPeriods() {
         break;
       }
       
-      // Only count items that are leaf nodes (don't have children themselves)
-      // This prevents double counting
-      const isLeaf = !hasChildren(nextItem, allItems, i);
-      if (isLeaf) {
+      // Only count items that are leaf nodes (criteriaType !== 0)
+      // This prevents double counting parent nodes
+      if (nextItem.criteriaType !== 0) {
         const value = nextItem[field];
         if (typeof value === 'number') {
           total += value;
@@ -1040,11 +1020,11 @@ export default function EvaluationPeriods() {
                             const indentLevel = (item.level || 1) - 1;
                             const indentPx = 8 + indentLevel * 24; // Base 8px + 24px per level
 
-                            // Check if this item has children
-                            const itemHasChildren = hasChildren(item, filteredCriteria, itemIndex);
+                            // Check if this item is a parent node (criteriaType = 0) or leaf node (criteriaType = 1-4)
+                            const isParentNode = item.criteriaType === 0;
                             
-                            // If it has children, calculate sum of children's self-scores
-                            const childrenSelfScoreTotal = itemHasChildren 
+                            // If it's a parent, calculate sum of children's self-scores
+                            const childrenSelfScoreTotal = isParentNode 
                               ? calculateChildrenTotal(item, filteredCriteria, itemIndex, 'selfScore')
                               : 0;
 
@@ -1079,8 +1059,8 @@ export default function EvaluationPeriods() {
                                   {item.maxScore}
                                 </td>
                                 <td className="px-4 py-3 text-center border-l">
-                                  {itemHasChildren ? (
-                                    // Item has children - show sum of children's scores (read-only)
+                                  {isParentNode ? (
+                                    // Parent node (criteriaType = 0) - show sum of children's scores (read-only)
                                     <span
                                       className="font-medium text-sm text-muted-foreground"
                                       data-testid={`text-selfscore-total-${item.id}`}
@@ -1091,7 +1071,7 @@ export default function EvaluationPeriods() {
                                     summary.evaluation?.status === "draft" &&
                                     selectedPeriod &&
                                     selectedUnitId ? (
-                                    // Item is a leaf - show scoring button
+                                    // Leaf node (criteriaType 1-4) - show scoring button
                                     <Button
                                       variant="ghost"
                                       size="sm"

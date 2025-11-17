@@ -514,16 +514,14 @@ export default function EvaluationPeriods() {
     submitEvaluationMutation.mutate();
   };
 
-  // Calculate group totals - only sum root level items to avoid double counting in tree structure
+  // Calculate group totals - only sum items with code (scoring items, not parent containers)
   const calculateGroupTotal = (items: Criteria[], field: keyof Criteria) => {
     if (items.length === 0) return 0;
     
-    // Find minimum level in this group (root level)
-    const minLevel = Math.min(...items.map(item => item.level || 1));
-    
-    // Only sum items at the root level to avoid counting parent + children
+    // Only sum items that have a code (these are the actual scoring criteria)
+    // Parent items without codes are just containers and shouldn't be counted
     return items
-      .filter(item => (item.level || 1) === minLevel)
+      .filter(item => item.code?.trim())
       .reduce((sum, item) => {
         const value = item[field];
         return sum + (typeof value === 'number' ? value : 0);
@@ -805,7 +803,7 @@ export default function EvaluationPeriods() {
                         </td>
                       </tr>
                       {group.criteria
-                        .filter(item => item.code) // Only show items with code
+                        .filter(item => item.code?.trim()) // Only show items with code
                         .map((item, itemIndex) => {
                         // Calculate indent based on level (level 1 = no indent, level 2 = 1rem, level 3 = 2rem, etc.)
                         const indentLevel = (item.level || 1) - 1;

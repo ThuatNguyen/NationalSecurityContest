@@ -9,14 +9,19 @@ Preferred communication style: Simple, everyday language.
 ## Recent Changes
 
 ### 2025-11-17: Fixed Evaluation Criteria Table Display
-- **Problem**: Evaluation criteria table in "Kỳ thi đua" page showing incorrect totals (double-counting issue).
-- **Root Cause**: The `calculateGroupTotal` function was summing **all criteria items** in a group, including both parent and children nodes in the tree structure. This caused double-counting because parent node scores already include the sum of their children.
-- **Solution**: Updated `calculateGroupTotal` to only sum **root-level criteria** (minimum level in each group), preventing double-counting in hierarchical tree structures.
+- **Problem**: Evaluation criteria table in "Kỳ thi đua" page showing incorrect totals (double-counting issue) and displaying parent container rows without codes.
+- **Root Cause**: 
+  1. The `calculateGroupTotal` function was summing **all criteria items** in a group, including both parent containers (without codes) and actual scoring criteria (with codes)
+  2. Parent container rows were being displayed in the table even though they have no code field
+- **Solution**: 
+  1. Updated `calculateGroupTotal` to only sum **items with codes** (actual scoring criteria), filtering out parent containers
+  2. Added `.filter(item => item.code?.trim())` to display logic to hide parent container rows
 - **Technical Details**:
-  - Modified logic to find minimum level in each criteria group
-  - Filter to only sum items at the root level (e.g., if group has levels 1,2,3, only sum level 1)
-  - This ensures parent + children scores are not added together (parent already contains children's sum)
-- **Impact**: Total scores now correctly reflect the sum of root-level criteria only, matching the hierarchical tree structure design
+  - Modified both calculation and display logic to consistently filter by `item.code?.trim()`
+  - Parent containers (e.g., "Coong tac tham mau" without code) are now hidden
+  - Only scoring criteria (e.g., "A Coong tac tham mau" with code "A") are displayed and counted
+  - This ensures totals reflect only actual scoring items, not container placeholders
+- **Impact**: Table now displays only scoring criteria with codes, and totals correctly reflect the sum of those items only
 
 ### 2025-11-17: Resolved Production Database Authentication Issues
 - **Problem**: Users unable to login to production deployment with credentials that worked in development.

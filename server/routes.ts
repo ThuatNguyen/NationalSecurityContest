@@ -9,7 +9,7 @@ import fs from "fs";
 import mime from "mime-types";
 import { storage } from "./storage";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, and, or, isNull, sql as sqlExpr } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import { 
   insertUserSchema, 
@@ -2033,20 +2033,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
         selfScore: z.number().optional(),
         bonusCount: z.number().optional(),
         penaltyCount: z.number().optional(),
-        evidenceFile: z.string().optional(),
+        evidenceFile: z.string().nullable().optional(),
         note: z.string().optional(),
       }).parse(req.body);
 
-      // Permission check
+      // Permission check: Unit ownership
       if (req.user!.role === "user" && inputData.unitId !== req.user!.unitId) {
         return res.status(403).json({ message: "Bạn chỉ có thể chấm điểm cho đơn vị của mình" });
       }
 
-      if (req.user!.role === "cluster_leader") {
-        const unit = await storage.getUnit(inputData.unitId);
-        if (!unit || unit.clusterId !== req.user!.clusterId) {
-          return res.status(403).json({ message: "Bạn chỉ có thể chấm điểm cho đơn vị trong cụm của mình" });
-        }
+      const unit = await storage.getUnit(inputData.unitId);
+      if (!unit) {
+        return res.status(404).json({ message: "Không tìm thấy đơn vị" });
+      }
+
+      if (req.user!.role === "cluster_leader" && unit.clusterId !== req.user!.clusterId) {
+        return res.status(403).json({ message: "Bạn chỉ có thể chấm điểm cho đơn vị trong cụm của mình" });
+      }
+
+      // SECURITY: Validate period belongs to unit's cluster
+      const periodClusters = await storage.getPeriodsClustersList(inputData.periodId);
+      const periodHasCluster = periodClusters.some(c => c.id === unit.clusterId);
+      if (!periodHasCluster) {
+        return res.status(403).json({ message: "Kỳ thi đua này không áp dụng cho cụm của đơn vị" });
+      }
+
+      // SECURITY: Verify unit actually participates in this period (has evaluation)
+      const evaluation = await storage.getEvaluationByPeriodUnit(inputData.periodId, inputData.unitId);
+      if (!evaluation) {
+        return res.status(403).json({ message: "Đơn vị chưa được khởi tạo cho kỳ thi đua này" });
+      }
+
+      // SECURITY: Validate criteria belongs to this period (and optionally cluster)
+      const criteriaExists = await db.select()
+        .from(schema.criteria)
+        .where(
+          and(
+            eq(schema.criteria.id, inputData.criteriaId),
+            eq(schema.criteria.periodId, inputData.periodId),
+            // Criteria must be for this cluster OR global (null clusterId) - use safe Drizzle primitives
+            or(
+              eq(schema.criteria.clusterId, unit.clusterId),
+              isNull(schema.criteria.clusterId)
+            )
+          )
+        )
+        .limit(1);
+      
+      if (criteriaExists.length === 0) {
+        return res.status(403).json({ message: "Tiêu chí này không thuộc kỳ thi đua hoặc cụm của đơn vị" });
       }
 
       // Convert numbers to strings for Drizzle decimal fields
@@ -2055,9 +2090,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         unitId: inputData.unitId,
         periodId: inputData.periodId,
         note: inputData.note,
-        evidenceFile: inputData.evidenceFile,
-        status: "draft",
+        // Don't set status here - let storage.upsertCriteriaResult handle it
       };
+      
+      // Allow explicit null to clear evidenceFile
+      if (inputData.evidenceFile !== undefined) {
+        resultData.evidenceFile = inputData.evidenceFile;
+      }
+      
       if (inputData.actualValue !== undefined) {
         resultData.actualValue = inputData.actualValue.toString();
       }

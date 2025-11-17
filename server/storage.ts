@@ -865,18 +865,28 @@ export class DatabaseStorage implements IStorage {
     const existing = await this.getCriteriaResult(result.criteriaId, result.unitId, result.periodId);
     
     if (existing) {
-      // Update
+      // Update: preserve status unless explicitly changed
+      const updateData: any = { ...result, updatedAt: new Date() };
+      if (!result.status) {
+        updateData.status = existing.status; // Preserve existing status
+      }
+      
       const updated = await db
         .update(schema.criteriaResults)
-        .set({ ...result, updatedAt: new Date() })
+        .set(updateData)
         .where(eq(schema.criteriaResults.id, existing.id))
         .returning();
       return updated[0];
     } else {
-      // Insert
+      // Insert: use provided status or default to 'draft'
+      const insertData: any = { ...result };
+      if (!insertData.status) {
+        insertData.status = 'draft';
+      }
+      
       const inserted = await db
         .insert(schema.criteriaResults)
-        .values(result)
+        .values(insertData)
         .returning();
       return inserted[0];
     }

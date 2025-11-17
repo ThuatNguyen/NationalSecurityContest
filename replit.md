@@ -8,6 +8,22 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+### 2025-11-17: Implemented Hierarchical Scoring Logic
+- **Feature**: Smart self-scoring column that distinguishes between parent/branch nodes and leaf nodes
+- **Logic**:
+  - **Parent/Branch nodes** (items with children): Display sum of children's self-scores (read-only, not clickable)
+  - **Leaf nodes** (items without children): Display "Chấm điểm" button for user input
+- **Implementation**:
+  - Added `hasChildren()` helper to detect if a criteria item has child items based on level hierarchy
+  - Added `calculateChildrenTotal()` helper to sum scores of all leaf descendants
+  - Modified rendering logic to conditionally show button vs. calculated total
+  - Only leaf nodes are directly scorable; parent nodes automatically aggregate children's scores
+- **Technical Details**:
+  - Uses level-based tree traversal to identify parent-child relationships
+  - Prevents double-counting by only summing leaf node scores for parent totals
+  - Filtered criteria list passed to helper functions for accurate index-based lookups
+- **Impact**: Users only score leaf criteria; parent/branch totals are automatically calculated, preventing errors and simplifying the scoring workflow
+
 ### 2025-11-17: Fixed Evaluation Criteria Table Display
 - **Problem**: Evaluation criteria table in "Kỳ thi đua" page showing incorrect totals (double-counting issue) and displaying parent container rows without codes.
 - **Root Cause**: 

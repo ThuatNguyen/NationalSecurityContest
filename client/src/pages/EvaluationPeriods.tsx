@@ -641,6 +641,56 @@ export default function EvaluationPeriods() {
     );
   };
 
+  // Helper: Check if an item has children (is a parent/branch node)
+  const hasChildren = (item: Criteria, allItems: Criteria[], currentIndex: number) => {
+    const currentLevel = item.level || 1;
+    // Check if there's any item after this one with a higher level
+    for (let i = currentIndex + 1; i < allItems.length; i++) {
+      const nextItem = allItems[i];
+      const nextLevel = nextItem.level || 1;
+      
+      // If we find an item with same or lower level, we've finished this branch
+      if (nextLevel <= currentLevel) {
+        break;
+      }
+      
+      // If we find an item with higher level, this item has children
+      if (nextLevel > currentLevel) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // Helper: Calculate sum of children's scores (only leaf nodes to avoid double counting)
+  const calculateChildrenTotal = (item: Criteria, allItems: Criteria[], currentIndex: number, field: keyof Criteria) => {
+    const currentLevel = item.level || 1;
+    let total = 0;
+    
+    // Sum all direct and indirect children until we hit same or lower level
+    for (let i = currentIndex + 1; i < allItems.length; i++) {
+      const nextItem = allItems[i];
+      const nextLevel = nextItem.level || 1;
+      
+      // If we hit same or lower level, we've finished this branch
+      if (nextLevel <= currentLevel) {
+        break;
+      }
+      
+      // Only count items that are leaf nodes (don't have children themselves)
+      // This prevents double counting
+      const isLeaf = !hasChildren(nextItem, allItems, i);
+      if (isLeaf) {
+        const value = nextItem[field];
+        if (typeof value === 'number') {
+          total += value;
+        }
+      }
+    }
+    
+    return total;
+  };
+
   // Render permission check
   const canReview1 = user?.role === "admin" || user?.role === "cluster_leader";
   const canReview2 = user?.role === "admin";
@@ -980,14 +1030,23 @@ export default function EvaluationPeriods() {
                       ),
                     };
 
+                    // Get filtered criteria list for this group
+                    const filteredCriteria = group.criteria.filter((item) => item.code?.trim());
+
                     return (
                       <Fragment key={group.id}>
-                        {group.criteria
-                          .filter((item) => item.code?.trim()) // Only show items with code
-                          .map((item, itemIndex) => {
+                        {filteredCriteria.map((item, itemIndex) => {
                             // Calculate indent based on level (level 1 = no indent, level 2 = 1rem, level 3 = 2rem, etc.)
                             const indentLevel = (item.level || 1) - 1;
                             const indentPx = 8 + indentLevel * 24; // Base 8px + 24px per level
+
+                            // Check if this item has children
+                            const itemHasChildren = hasChildren(item, filteredCriteria, itemIndex);
+                            
+                            // If it has children, calculate sum of children's self-scores
+                            const childrenSelfScoreTotal = itemHasChildren 
+                              ? calculateChildrenTotal(item, filteredCriteria, itemIndex, 'selfScore')
+                              : 0;
 
                             return (
                               <tr
@@ -1020,10 +1079,19 @@ export default function EvaluationPeriods() {
                                   {item.maxScore}
                                 </td>
                                 <td className="px-4 py-3 text-center border-l">
-                                  {user.role === "user" &&
-                                  summary.evaluation?.status === "draft" &&
-                                  selectedPeriod &&
-                                  selectedUnitId ? (
+                                  {itemHasChildren ? (
+                                    // Item has children - show sum of children's scores (read-only)
+                                    <span
+                                      className="font-medium text-sm text-muted-foreground"
+                                      data-testid={`text-selfscore-total-${item.id}`}
+                                    >
+                                      {childrenSelfScoreTotal > 0 ? childrenSelfScoreTotal.toFixed(2) : '-'}
+                                    </span>
+                                  ) : user.role === "user" &&
+                                    summary.evaluation?.status === "draft" &&
+                                    selectedPeriod &&
+                                    selectedUnitId ? (
+                                    // Item is a leaf - show scoring button
                                     <Button
                                       variant="ghost"
                                       size="sm"
@@ -1039,6 +1107,7 @@ export default function EvaluationPeriods() {
                                         : "Chấm điểm"}
                                     </Button>
                                   ) : (
+                                    // Read-only view for non-draft or non-user roles
                                     <span
                                       className="font-medium text-sm"
                                       data-testid={`text-selfscore-${item.id}`}

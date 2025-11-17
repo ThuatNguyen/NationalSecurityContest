@@ -233,25 +233,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Utility endpoint to hash passwords (for manual user creation in production)
-  // DELETE THIS after initial setup
-  app.post("/api/util/hash-password", async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { password } = req.body;
-      if (!password) {
-        return res.status(400).json({ message: "Password required" });
-      }
-      const hashed = await bcrypt.hash(password, 10);
-      return res.json({ 
-        plaintext: password,
-        hashed: hashed,
-        instructions: "Copy the 'hashed' value and update your user's password column in the database with this value"
-      });
-    } catch (error) {
-      next(error);
-    }
-  });
-
   // Authentication routes
   // Admins can create any user; cluster_leaders can only create users in their cluster
   app.post("/api/auth/register", requireRole("admin", "cluster_leader"), async (req, res, next) => {
@@ -1159,16 +1140,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Không tìm thấy kỳ thi đua" });
       }
 
-      // Get source criteria (either from another period or from year+cluster)
+      // Get source criteria from another period
       const criteriaTreeStorage = (await import('./criteriaTreeStorage')).criteriaTreeStorage;
-      let sourceCriteria;
       
-      if (sourcePeriodId) {
-        sourceCriteria = await criteriaTreeStorage.getCriteria(period.year, clusterId, sourcePeriodId);
-      } else {
-        // Copy from general criteria (no period assigned)
-        sourceCriteria = await criteriaTreeStorage.getCriteria(period.year, clusterId);
+      if (!sourcePeriodId) {
+        return res.status(400).json({ message: "Phải chỉ định kỳ thi đua nguồn" });
       }
+      
+      const sourceCriteria = await criteriaTreeStorage.getCriteria(sourcePeriodId, clusterId);
 
       if (sourceCriteria.length === 0) {
         return res.status(404).json({ message: "Không tìm thấy tiêu chí nguồn" });

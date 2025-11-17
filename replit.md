@@ -6,6 +6,26 @@ This web application digitizes and streamlines the evaluation process for the Vi
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
+## Recent Changes
+
+### 2025-11-17: Resolved Production Database Authentication Issues
+- **Problem**: Users unable to login to production deployment with credentials that worked in development.
+- **Root Causes**:
+  1. **Whitespace in usernames**: Manual data entry via Database Pane included trailing/leading spaces (e.g., `"admin "` instead of `"admin"`), causing username lookups to fail
+  2. **Plain-text passwords**: Manual user creation stored passwords as plain text (e.g., `"admin123"`), but authentication requires bcrypt hashes (e.g., `"$2b$10$..."`). The `bcrypt.compare()` function expects hashed passwords and fails when comparing against plain text
+- **Solutions**:
+  1. **Username cleanup**: Remove all trailing/leading whitespace from username columns in Production Database
+  2. **Password hashing**: Use the utility endpoint `POST /api/util/hash-password` to generate bcrypt hashes, then update password column in Production Database with the hashed value
+- **Technical Details**:
+  - Created temporary utility endpoint `/api/util/hash-password` for password hashing (should be deleted after initial setup)
+  - Bcrypt hash format: `$2b$10$<salt><hash>`, approximately 60 characters
+  - Each hash is unique due to random salt, but all validate against the same plain-text password
+- **Production Database Best Practices**:
+  - Always trim whitespace when manually entering data
+  - Never store plain-text passwords - use bcrypt hashing (10 rounds)
+  - Verify data integrity before deployment using seed scripts in development
+- **Impact**: Production authentication now works correctly with proper bcrypt password validation
+
 ## System Architecture
 
 ### Frontend Architecture

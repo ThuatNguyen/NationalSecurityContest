@@ -47,28 +47,12 @@ declare global {
 passport.use(
   new LocalStrategy(async (username, password, done) => {
     try {
-      console.log('[AUTH DEBUG] Login attempt:', { username });
-      
       const user = await storage.getUserByUsername(username);
       if (!user) {
-        console.log('[AUTH DEBUG] User not found:', username);
         return done(null, false, { message: "Tên đăng nhập không tồn tại" });
       }
 
-      console.log('[AUTH DEBUG] User found:', { 
-        username: user.username, 
-        passwordHash: user.password.substring(0, 20) + '...',
-        passwordLength: user.password.length 
-      });
-
       const isValid = await bcrypt.compare(password, user.password);
-      console.log('[AUTH DEBUG] Password validation:', { 
-        username, 
-        isValid,
-        providedPasswordLength: password.length,
-        storedHashLength: user.password.length
-      });
-
       if (!isValid) {
         return done(null, false, { message: "Mật khẩu không đúng" });
       }
@@ -82,7 +66,6 @@ passport.use(
         unitId: user.unitId,
       });
     } catch (err) {
-      console.error('[AUTH ERROR]', err);
       return done(err);
     }
   })

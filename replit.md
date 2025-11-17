@@ -13,18 +13,22 @@ Preferred communication style: Simple, everyday language.
 - **Root Causes**:
   1. **Whitespace in usernames**: Manual data entry via Database Pane included trailing/leading spaces (e.g., `"admin "` instead of `"admin"`), causing username lookups to fail
   2. **Plain-text passwords**: Manual user creation stored passwords as plain text (e.g., `"admin123"`), but authentication requires bcrypt hashes (e.g., `"$2b$10$..."`). The `bcrypt.compare()` function expects hashed passwords and fails when comparing against plain text
+  3. **Session persistence**: Sessions not maintained after login due to reverse proxy configuration - Express needed to trust proxy headers for secure cookies to work properly
 - **Solutions**:
   1. **Username cleanup**: Remove all trailing/leading whitespace from username columns in Production Database
   2. **Password hashing**: Use the utility endpoint `POST /api/util/hash-password` to generate bcrypt hashes, then update password column in Production Database with the hashed value
+  3. **Trust proxy setting**: Added `app.set('trust proxy', 1)` to ensure Express properly handles HTTPS connections behind Replit's reverse proxy
 - **Technical Details**:
-  - Created temporary utility endpoint `/api/util/hash-password` for password hashing (should be deleted after initial setup)
+  - Created temporary utility endpoint `/api/util/hash-password` for password hashing (deleted after setup)
   - Bcrypt hash format: `$2b$10$<salt><hash>`, approximately 60 characters
   - Each hash is unique due to random salt, but all validate against the same plain-text password
+  - Added session debug middleware to track session lifecycle and authentication state
+  - Trust proxy setting enables secure cookies to work correctly with Replit's infrastructure
 - **Production Database Best Practices**:
   - Always trim whitespace when manually entering data
   - Never store plain-text passwords - use bcrypt hashing (10 rounds)
   - Verify data integrity before deployment using seed scripts in development
-- **Impact**: Production authentication now works correctly with proper bcrypt password validation
+- **Impact**: Production authentication now works correctly with proper bcrypt password validation and session persistence through reverse proxy
 
 ## System Architecture
 

@@ -260,162 +260,72 @@ export default function EvaluationPeriods() {
     setReviewModalOpen(true);
   };
 
-  // Mutation for saving scores
-  const saveScoreMutation = useMutation({
-    mutationFn: async ({
-      score,
-      file,
-      criteriaId,
-      existingFileUrl,
-    }: {
-      score: number;
-      file: File | null;
-      criteriaId: string;
-      existingFileUrl?: string | null;
-    }) => {
-      let fileUrl: string | undefined = existingFileUrl || undefined; // Preserve existing file
+  // OLD saveScoreMutation removed - now using handleSaveScore with new API
 
-      // Upload file if provided (overwrites existing)
-      if (file) {
-        console.log(
-          "[SCORE SAVE] Uploading file:",
-          file.name,
-          "size:",
-          file.size,
-        );
-        const formData = new FormData();
-        formData.append("file", file);
-
-        const uploadRes = await fetch("/api/upload", {
-          method: "POST",
-          body: formData,
-          credentials: "include",
-        });
-
-        if (!uploadRes.ok) {
-          console.error(
-            "[SCORE SAVE] Upload failed:",
-            uploadRes.status,
-            uploadRes.statusText,
-          );
-          throw new Error("Upload file thất bại");
-        }
-
-        const uploadData = await uploadRes.json();
-        fileUrl = uploadData.fileUrl;
-        console.log("[SCORE SAVE] Upload successful, fileUrl:", fileUrl);
-      } else {
-        console.log("[SCORE SAVE] No new file, preserving existing:", fileUrl);
-      }
-
-      // Capture current periodId and unitId for invalidation
-      const currentPeriodId = selectedPeriod?.id;
-      const currentUnitId = selectedUnitId;
-
-      // Ensure evaluation exists (create if needed)
-      let evaluationId = summary?.evaluation?.id;
-      if (!evaluationId) {
-        console.log(
-          "[SCORE SAVE] No evaluation found, creating one via ensure endpoint",
-        );
-        const ensureRes = await apiRequest("POST", "/api/evaluations/ensure", {
-          periodId: currentPeriodId,
-          unitId: currentUnitId,
-        });
-        const ensureData = await ensureRes.json();
-        evaluationId = ensureData.id;
-        console.log("[SCORE SAVE] Evaluation ensured, id:", evaluationId);
-      }
-
-      // Build score data, omitting undefined file URLs (don't overwrite with null)
-      const scoreData: any = {
-        criteriaId,
-        selfScore: score,
-      };
-
-      // Only include selfScoreFile if we have a valid URL
-      if (fileUrl) {
-        scoreData.selfScoreFile = fileUrl;
-      }
-
-      console.log("[SCORE SAVE] Sending scores update:", [scoreData]);
-      const res = await apiRequest(
-        "PUT",
-        `/api/evaluations/${evaluationId}/scores`,
-        { scores: [scoreData] },
-      );
-      const result = await res.json();
-      console.log("[SCORE SAVE] Update successful, result:", result);
-
-      // Return captured IDs for invalidation
-      return { result, periodId: currentPeriodId, unitId: currentUnitId };
-    },
-    onSuccess: (data) => {
-      console.log(
-        "[SCORE SAVE] onSuccess called, invalidating cache for:",
-        data.periodId,
-        data.unitId,
-      );
-      // Invalidate using captured IDs to ensure correct query is invalidated
-      queryClient.invalidateQueries({
-        queryKey: [
-          "/api/evaluation-periods",
-          data.periodId,
-          "units",
-          data.unitId,
-          "summary",
-        ],
-      });
-      toast({
-        title: "Thành công",
-        description: "Đã lưu điểm thành công",
-      });
-      setScoringModalOpen(false);
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Lỗi",
-        description: error.message || "Không thể lưu điểm",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const handleSaveScore = (data: {
+  const handleSaveScore = async (data: {
     score?: number;
     file?: File | null;
     targetValue?: number;
     actualValue?: number;
     achieved?: boolean;
   }) => {
-    if (!selectedCriteria) return;
+    if (!selectedCriteria || !selectedPeriod || !selectedUnitId) return;
     
-    // Type 1 (Quantitative): Has targetValue/actualValue, no score yet
-    // Type 2-4: Has score
     const criteriaType = selectedCriteria.criteriaType || 3;
     
-    if (criteriaType === 1) {
-      // Quantitative: Store target/actual (backend will calculate score later)
-      // For now, show warning that backend is not ready
+    try {
+      // Upload file if provided
+      let fileUrl: string | undefined;
+      if (data.file) {
+        const formData = new FormData();
+        formData.append("file", data.file);
+        const uploadRes = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+          credentials: "include",
+        });
+        if (!uploadRes.ok) throw new Error("Upload file thất bại");
+        const uploadData = await uploadRes.json();
+        fileUrl = uploadData.fileUrl;
+      }
+
+      // Build payload based on criteriaType
+      const payload: any = {
+        criteriaId: selectedCriteria.id,
+        unitId: selectedUnitId,
+        periodId: selectedPeriod.id,
+        evidenceFile: fileUrl || selectedCriteria.selfScoreFile,
+      };
+
+      if (criteriaType === 1) {
+        // Type 1: Quantitative
+        payload.actualValue = data.actualValue;
+      } else if (criteriaType === 2) {
+        // Type 2: Qualitative  
+        payload.selfScore = data.achieved ? selectedCriteria.maxScore : 0;
+      } else if (criteriaType === 3 || criteriaType === 4) {
+        // Type 3/4: Direct score
+        payload.selfScore = data.score;
+      }
+
+      // Call new API
+      const res = await apiRequest("POST", "/api/criteria-results", payload);
+      await res.json();
+
+      // Refresh data
+      queryClient.invalidateQueries({
+        queryKey: ["/api/evaluation-periods", selectedPeriod.id, "units", selectedUnitId, "summary"],
+      });
+
+      toast({ title: "Thành công", description: "Đã lưu điểm thành công" });
+      setScoringModalOpen(false);
+    } catch (error: any) {
       toast({
-        title: "Chức năng đang phát triển",
-        description: "Tiêu chí định lượng sẽ được tính điểm tự động sau khi backend hoàn thành. Vui lòng chọn loại tiêu chí khác tạm thời.",
+        title: "Lỗi",
+        description: error.message || "Không thể lưu điểm",
         variant: "destructive",
       });
-      setScoringModalOpen(false);
-      return;
     }
-    
-    // For Type 2-4: Use score value
-    const score = data.score ?? 0;
-    const file = data.file ?? null;
-    
-    saveScoreMutation.mutate({
-      score,
-      file,
-      criteriaId: selectedCriteria.id,
-      existingFileUrl: selectedCriteria.selfScoreFile,
-    });
   };
 
   // Mutation for saving review scores

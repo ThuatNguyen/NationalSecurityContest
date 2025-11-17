@@ -2022,6 +2022,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // NEW: Upsert criteria result (Type 1-4 scoring)
+  app.post("/api/criteria-results", requireAuth, async (req, res, next) => {
+    try {
+      const inputData = z.object({
+        criteriaId: z.string(),
+        unitId: z.string(),
+        periodId: z.string(),
+        actualValue: z.number().optional(),
+        selfScore: z.number().optional(),
+        bonusCount: z.number().optional(),
+        penaltyCount: z.number().optional(),
+        evidenceFile: z.string().optional(),
+        note: z.string().optional(),
+      }).parse(req.body);
+
+      // Permission check
+      if (req.user!.role === "user" && inputData.unitId !== req.user!.unitId) {
+        return res.status(403).json({ message: "Bạn chỉ có thể chấm điểm cho đơn vị của mình" });
+      }
+
+      if (req.user!.role === "cluster_leader") {
+        const unit = await storage.getUnit(inputData.unitId);
+        if (!unit || unit.clusterId !== req.user!.clusterId) {
+          return res.status(403).json({ message: "Bạn chỉ có thể chấm điểm cho đơn vị trong cụm của mình" });
+        }
+      }
+
+      // Convert numbers to strings for Drizzle decimal fields
+      const resultData: any = {
+        criteriaId: inputData.criteriaId,
+        unitId: inputData.unitId,
+        periodId: inputData.periodId,
+        note: inputData.note,
+        evidenceFile: inputData.evidenceFile,
+        status: "draft",
+      };
+      if (inputData.actualValue !== undefined) {
+        resultData.actualValue = inputData.actualValue.toString();
+      }
+      if (inputData.selfScore !== undefined) {
+        resultData.selfScore = inputData.selfScore.toString();
+      }
+      if (inputData.bonusCount !== undefined) {
+        resultData.bonusCount = inputData.bonusCount;
+      }
+      if (inputData.penaltyCount !== undefined) {
+        resultData.penaltyCount = inputData.penaltyCount;
+      }
+
+      const result = await storage.upsertCriteriaResult(resultData);
+      res.json(result);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Dữ liệu không hợp lệ", errors: error.errors });
+      }
+      next(error);
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

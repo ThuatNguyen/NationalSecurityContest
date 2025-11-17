@@ -9,7 +9,8 @@ import type {
   // Criteria, InsertCriteria, // OLD - removed with tree refactor
   EvaluationPeriod, InsertEvaluationPeriod,
   Evaluation, InsertEvaluation,
-  Score, InsertScore
+  Score, InsertScore,
+  CriteriaResult, InsertCriteriaResult
 } from "@shared/schema";
 
 export interface IStorage {
@@ -74,7 +75,7 @@ export interface IStorage {
   createEvaluation(evaluation: InsertEvaluation): Promise<Evaluation>;
   updateEvaluation(id: string, evaluation: Partial<InsertEvaluation>): Promise<Evaluation | undefined>;
   
-  // Scores
+  // Scores (Legacy)
   getScores(evaluationId: string): Promise<Score[]>;
   getScore(id: string): Promise<Score | undefined>;
   createScore(score: InsertScore): Promise<Score>;
@@ -82,6 +83,11 @@ export interface IStorage {
   
   // Recalculation (transactional)
   recalculateEvaluationScoresTx(evaluationId: string): Promise<{ scoresUpdated: number }>;
+  
+  // Criteria Results (New scoring system)
+  getCriteriaResult(criteriaId: string, unitId: string, periodId: string): Promise<CriteriaResult | undefined>;
+  upsertCriteriaResult(result: InsertCriteriaResult): Promise<CriteriaResult>;
+  getCriteriaResults(periodId: string, unitId: string): Promise<CriteriaResult[]>;
   
   // NEW EVALUATION SUMMARY METHOD - Tree-based
   getEvaluationSummaryTree(periodId: string, unitId: string): Promise<{
@@ -836,6 +842,56 @@ export class DatabaseStorage implements IStorage {
       evaluation,
       criteriaGroups,
     };
+  }
+
+  // Criteria Results (New scoring system)
+  async getCriteriaResult(criteriaId: string, unitId: string, periodId: string): Promise<CriteriaResult | undefined> {
+    const results = await db
+      .select()
+      .from(schema.criteriaResults)
+      .where(
+        and(
+          eq(schema.criteriaResults.criteriaId, criteriaId),
+          eq(schema.criteriaResults.unitId, unitId),
+          eq(schema.criteriaResults.periodId, periodId)
+        )
+      )
+      .limit(1);
+    return results[0];
+  }
+
+  async upsertCriteriaResult(result: InsertCriteriaResult): Promise<CriteriaResult> {
+    // Check if exists
+    const existing = await this.getCriteriaResult(result.criteriaId, result.unitId, result.periodId);
+    
+    if (existing) {
+      // Update
+      const updated = await db
+        .update(schema.criteriaResults)
+        .set({ ...result, updatedAt: new Date() })
+        .where(eq(schema.criteriaResults.id, existing.id))
+        .returning();
+      return updated[0];
+    } else {
+      // Insert
+      const inserted = await db
+        .insert(schema.criteriaResults)
+        .values(result)
+        .returning();
+      return inserted[0];
+    }
+  }
+
+  async getCriteriaResults(periodId: string, unitId: string): Promise<CriteriaResult[]> {
+    return await db
+      .select()
+      .from(schema.criteriaResults)
+      .where(
+        and(
+          eq(schema.criteriaResults.periodId, periodId),
+          eq(schema.criteriaResults.unitId, unitId)
+        )
+      );
   }
 }
 

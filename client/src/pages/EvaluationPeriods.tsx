@@ -804,7 +804,9 @@ export default function EvaluationPeriods() {
                           {groupTotals.finalScore.toFixed(2)}
                         </td>
                       </tr>
-                      {group.criteria.map((item, itemIndex) => {
+                      {group.criteria
+                        .filter(item => item.code) // Only show items with code
+                        .map((item, itemIndex) => {
                         // Calculate indent based on level (level 1 = no indent, level 2 = 1rem, level 3 = 2rem, etc.)
                         const indentLevel = (item.level || 1) - 1;
                         const indentPx = 8 + (indentLevel * 24); // Base 8px + 24px per level

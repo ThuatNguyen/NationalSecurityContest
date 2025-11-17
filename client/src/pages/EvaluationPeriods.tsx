@@ -381,13 +381,40 @@ export default function EvaluationPeriods() {
     },
   });
 
-  const handleSaveScore = (score: number, file: File | null) => {
+  const handleSaveScore = (data: {
+    score?: number;
+    file?: File | null;
+    targetValue?: number;
+    actualValue?: number;
+    achieved?: boolean;
+  }) => {
     if (!selectedCriteria) return;
+    
+    // Type 1 (Quantitative): Has targetValue/actualValue, no score yet
+    // Type 2-4: Has score
+    const criteriaType = selectedCriteria.criteriaType || 3;
+    
+    if (criteriaType === 1) {
+      // Quantitative: Store target/actual (backend will calculate score later)
+      // For now, show warning that backend is not ready
+      toast({
+        title: "Chức năng đang phát triển",
+        description: "Tiêu chí định lượng sẽ được tính điểm tự động sau khi backend hoàn thành. Vui lòng chọn loại tiêu chí khác tạm thời.",
+        variant: "destructive",
+      });
+      setScoringModalOpen(false);
+      return;
+    }
+    
+    // For Type 2-4: Use score value
+    const score = data.score ?? 0;
+    const file = data.file ?? null;
+    
     saveScoreMutation.mutate({
       score,
       file,
       criteriaId: selectedCriteria.id,
-      existingFileUrl: selectedCriteria.selfScoreFile, // Preserve existing file when no new upload
+      existingFileUrl: selectedCriteria.selfScoreFile,
     });
   };
 
@@ -1263,6 +1290,7 @@ export default function EvaluationPeriods() {
                 onClose={() => setScoringModalOpen(false)}
                 criteriaName={selectedCriteria.name}
                 maxScore={selectedCriteria.maxScore}
+                criteriaType={selectedCriteria.criteriaType || 3} 
                 currentScore={selectedCriteria.selfScore}
                 currentFile={selectedCriteria.selfScoreFile}
                 onSave={handleSaveScore}

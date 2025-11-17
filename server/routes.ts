@@ -233,6 +233,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Utility endpoint to hash passwords (for manual user creation in production)
+  // DELETE THIS after initial setup
+  app.post("/api/util/hash-password", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { password } = req.body;
+      if (!password) {
+        return res.status(400).json({ message: "Password required" });
+      }
+      const hashed = await bcrypt.hash(password, 10);
+      return res.json({ 
+        plaintext: password,
+        hashed: hashed,
+        instructions: "Copy the 'hashed' value and update your user's password column in the database with this value"
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   // Authentication routes
   // Admins can create any user; cluster_leaders can only create users in their cluster
   app.post("/api/auth/register", requireRole("admin", "cluster_leader"), async (req, res, next) => {

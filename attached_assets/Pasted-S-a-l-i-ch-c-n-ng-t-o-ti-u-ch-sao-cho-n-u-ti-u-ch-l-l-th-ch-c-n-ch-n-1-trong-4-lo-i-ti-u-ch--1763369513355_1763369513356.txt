@@ -1,0 +1,35 @@
+Sửa lại chức năng tạo tiêu chí sao cho nếu tiêu chí là lá thì chỉ cần chọn 1 trong 4 loại tiêu chí (Tiêu chí định lượng (criteriaType = 1); Tiêu chí định tính (criteriaType = 2); tiêu chí nhập thẳng(criteriaType = 3); tiêu chí cộng,trừ(criteriaType = 4) sau đó nhập vào số điểm tối đa(max_score).
+Trong chức năng chấm điểm nếu tiêu chí là Loại định lượng (criteria_type = 1) hiển thị form nhập thông tin gồm chỉ tiêu được giao (target); kết quả thực hiện (actual). Nếu tiêu chí là loại định tính(criteria_type = 2) hiển thị form thông tin gồm: radio button - đạt/không đạt + upload file đính kèm. Nếu tiêu chí chấm thẳng(criteria_type = 3) hiển thị ô nhập điểm(nhưng không được vượt quá max_score của tiêu chí) + upload file đính kèm;Nếu tiêu chí cộng trừ(criteria_type = 4) hiển thị ô nhập điểm(nhưng không được vượt quá max_score của tiêu chí) + upload file đính kèm.
+
+Hệ thống sẽ tự tính loại tiêu chí định lượng(criteria_type = 1) sau khi kỳ thi đua đóng chấm điểm. Đối với loại tiêu chí định tính. Nếu đạt = max_score, nếu không đạt = 0
+thuật toán tính tiêu chí định lượng như sau:
+Update the quantitative scoring algorithm (criteria_type = 1) so that the leading unit in the cluster is determined based on “exceed percentage” instead of absolute actual values.
+1. General variables:
+    • A = actual_value
+    • T = target_value
+    • MS = max_score
+2. Compute exceed percentage for every unit:
+unit_exceed_percent = (A - T) / T
+3. Determine the leader unit using exceed percent:
+leader = unit with MAX(unit_exceed_percent)
+4. Leader values:
+L  = leader.actual_value
+TL = leader.target_value
+leader_exceed_percent = (L - TL) / TL
+5. Apply the scoring formulas:
+Case 1 — Not meeting target
+score = 0.5 × MS × (A / T)
+Case 2 — Meeting target
+score = 0.5 × MS
+Case 3 — Leader (highest exceed %)
+score = MS
+Case 4 — Exceeded but not leader
+score = 0.5 × MS
+     + (unit_exceed_percent / leader_exceed_percent) × (0.5 × MS)
+6. Notes:
+    • This algorithm supports both cases where all units share the same target or have different targets.
+    • Manual score entry must be disabled for quantitative criteria.
+    • All scores must be computed automatically and stored in criteriaResulformts.calculated_score.
+
+Hãy kiểm tra lại schema và xây sửa lại form tạo tiêu chí. Xây dựng form chấm điểm đối với các loai tiêu chí khác nhau
+nhau

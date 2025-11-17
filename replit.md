@@ -8,6 +8,16 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+### 2025-11-17: Fixed Evaluation Criteria Table Display
+- **Problem**: Evaluation criteria table in "Kỳ thi đua" page showing incorrect totals (double-counting issue).
+- **Root Cause**: The `calculateGroupTotal` function was summing **all criteria items** in a group, including both parent and children nodes in the tree structure. This caused double-counting because parent node scores already include the sum of their children.
+- **Solution**: Updated `calculateGroupTotal` to only sum **root-level criteria** (minimum level in each group), preventing double-counting in hierarchical tree structures.
+- **Technical Details**:
+  - Modified logic to find minimum level in each criteria group
+  - Filter to only sum items at the root level (e.g., if group has levels 1,2,3, only sum level 1)
+  - This ensures parent + children scores are not added together (parent already contains children's sum)
+- **Impact**: Total scores now correctly reflect the sum of root-level criteria only, matching the hierarchical tree structure design
+
 ### 2025-11-17: Resolved Production Database Authentication Issues
 - **Problem**: Users unable to login to production deployment with credentials that worked in development.
 - **Root Causes**:

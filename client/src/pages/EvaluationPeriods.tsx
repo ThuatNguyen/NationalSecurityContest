@@ -514,12 +514,20 @@ export default function EvaluationPeriods() {
     submitEvaluationMutation.mutate();
   };
 
-  // Calculate group totals
+  // Calculate group totals - only sum root level items to avoid double counting in tree structure
   const calculateGroupTotal = (items: Criteria[], field: keyof Criteria) => {
-    return items.reduce((sum, item) => {
-      const value = item[field];
-      return sum + (typeof value === 'number' ? value : 0);
-    }, 0);
+    if (items.length === 0) return 0;
+    
+    // Find minimum level in this group (root level)
+    const minLevel = Math.min(...items.map(item => item.level || 1));
+    
+    // Only sum items at the root level to avoid counting parent + children
+    return items
+      .filter(item => (item.level || 1) === minLevel)
+      .reduce((sum, item) => {
+        const value = item[field];
+        return sum + (typeof value === 'number' ? value : 0);
+      }, 0);
   };
 
   // Calculate overall totals

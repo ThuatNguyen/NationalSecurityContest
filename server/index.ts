@@ -57,20 +57,6 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Debug session middleware
-app.use((req, res, next) => {
-  if (req.path.startsWith('/api')) {
-    console.log('[SESSION DEBUG]', {
-      path: req.path,
-      sessionID: req.sessionID?.substring(0, 8),
-      hasSession: !!req.session,
-      isAuthenticated: req.isAuthenticated(),
-      userId: req.user?.id?.substring(0, 8)
-    });
-  }
-  next();
-});
-
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;

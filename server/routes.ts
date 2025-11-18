@@ -2065,7 +2065,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // SECURITY: Validate criteria belongs to this period (and optionally cluster)
-      const criteriaExists = await db.select()
+      const criteriaRows = await db.select()
         .from(schema.criteria)
         .where(
           and(
@@ -2080,9 +2080,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
         )
         .limit(1);
       
-      if (criteriaExists.length === 0) {
+      if (criteriaRows.length === 0) {
         return res.status(403).json({ message: "Tiêu chí này không thuộc kỳ thi đua hoặc cụm của đơn vị" });
       }
+
+      const criteria = criteriaRows[0];
+
+      // AUTO-CALCULATION: Calculate score based on criteria type
+      let calculatedScore: number | null = null;
+      
+      if (criteria.criteriaType === 1) {
+        // Type 1: Định lượng (Quantitative) - actualValue/targetValue × maxScore
+        // Allow overachievement (scores > maxScore are possible)
+        if (inputData.actualValue !== undefined) {
+          // Look up the assigned target for this unit+criteria+period
+          const targetRows = await db.select()
+            .from(schema.criteriaTargets)
+            .where(
+              and(
+                eq(schema.criteriaTargets.criteriaId, inputData.criteriaId),
+                eq(schema.criteriaTargets.unitId, inputData.unitId),
+                eq(schema.criteriaTargets.periodId, inputData.periodId)
+              )
+            )
+            .limit(1);
+          
+          if (targetRows.length > 0) {
+            const targetVal = Number(targetRows[0].targetValue);
+            const actualVal = Number(inputData.actualValue);
+            const maxScore = Number(criteria.maxScore);
+            
+            // Guard against division by zero and invalid numbers
+            if (targetVal > 0 && !isNaN(actualVal) && !isNaN(maxScore)) {
+              const percentage = actualVal / targetVal;
+              calculatedScore = percentage * maxScore;
+              // Round to 2 decimal places, allow scores > maxScore for overachievement
+              calculatedScore = Math.round(calculatedScore * 100) / 100;
+            }
+          }
+        }
+      } else if (criteria.criteriaType === 2) {
+        // Type 2: Định tính (Qualitative) - achieved=maxScore, not achieved=0
+        // For qualitative: selfScore=1 means achieved, selfScore=0 means not achieved
+        // This is a binary choice, not a numeric scale
+        if (inputData.selfScore !== undefined) {
+          const selfScoreVal = Number(inputData.selfScore);
+          const achieved = selfScoreVal === 1; // Explicit check for value 1 (achieved)
+          calculatedScore = achieved ? Number(criteria.maxScore) : 0;
+        }
+      }
+      // Type 3 & 4: No auto-calculation needed, user enters score directly
 
       // Convert numbers to strings for Drizzle decimal fields
       const resultData: any = {
@@ -2092,6 +2139,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         note: inputData.note,
         // Don't set status here - let storage.upsertCriteriaResult handle it
       };
+      
+      // Set calculatedScore if we computed one
+      if (calculatedScore !== null) {
+        resultData.calculatedScore = calculatedScore.toString();
+      }
       
       // Allow explicit null to clear evidenceFile
       if (inputData.evidenceFile !== undefined) {

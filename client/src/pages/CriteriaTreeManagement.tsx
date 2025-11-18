@@ -232,7 +232,7 @@ export default function CriteriaManagementPage() {
   };
   
   const handleSubmit = () => {
-    // Only include criteriaType and details if this is a leaf node
+    // Simplified: Only store criteriaType and maxScore
     const criteria: InsertCriteria = {
       name: formData.name,
       code: formData.code || undefined,
@@ -241,45 +241,21 @@ export default function CriteriaManagementPage() {
       level: parentCriteria ? parentCriteria.level + 1 : 1,
       maxScore: formData.maxScore,
       criteriaType: formData.isLeaf ? formData.criteriaType : 0, // 0 means parent node, no scoring
-      formulaType: (formData.isLeaf && formData.criteriaType === 1) ? formData.formulaType : undefined,
+      formulaType: undefined, // No longer needed - calculation logic is in backend
       orderIndex: formData.orderIndex,
       periodId: selectedPeriodId,
       clusterId: formData.clusterId || selectedClusterId,
       isActive: 1
     };
     
-    let details: any = {};
-    
-    // Add details based on criteria type (only for leaf nodes)
-    if (formData.isLeaf && formData.criteriaType === 1) {
-      details.formula = {
-        targetRequired: formData.targetRequired,
-        defaultTarget: formData.defaultTarget || null,
-        unit: formData.unit || null
-      };
-    } else if (formData.isLeaf && formData.criteriaType === 3) {
-      details.fixedScore = {
-        pointPerUnit: formData.pointPerUnit,
-        maxScoreLimit: formData.maxScoreLimit || null,
-        unit: formData.unit || null
-      };
-    } else if (formData.isLeaf && formData.criteriaType === 4) {
-      details.bonusPenalty = {
-        bonusPoint: formData.bonusPoint || null,
-        penaltyPoint: formData.penaltyPoint || null,
-        minScore: formData.minScore || null,
-        maxScore: formData.maxScoreBonus || null,
-        unit: formData.unit || null
-      };
-    }
-    
+    // No more complex details - simplified approach
     if (editingCriteria) {
       updateMutation.mutate({ 
         id: editingCriteria.id, 
-        data: { criteria, details: Object.keys(details).length > 0 ? details : undefined }
+        data: { criteria, details: undefined }
       });
     } else {
-      createMutation.mutate({ criteria, details: Object.keys(details).length > 0 ? details : undefined });
+      createMutation.mutate({ criteria, details: undefined });
     }
   };
   
@@ -416,6 +392,7 @@ export default function CriteriaManagementPage() {
                 checked={formData.isLeaf}
                 onChange={(e) => setFormData({ ...formData, isLeaf: e.target.checked })}
                 className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                data-testid="checkbox-is-leaf"
               />
               <Label htmlFor="isLeaf" className="cursor-pointer">
                 Đây là tiêu chí lá (có thể chấm điểm trực tiếp)
@@ -423,11 +400,108 @@ export default function CriteriaManagementPage() {
             </div>
             <p className="text-sm text-muted-foreground -mt-2">
               {formData.isLeaf 
-                ? "✓ Tiêu chí này sẽ được chấm điểm trực tiếp. Vui lòng chọn loại và nhập thông số chấm điểm."
+                ? "✓ Tiêu chí này sẽ được chấm điểm trực tiếp. Vui lòng chọn loại và nhập điểm tối đa."
                 : "ℹ️ Tiêu chí cha (không lá) sẽ tự động tính điểm từ tổng các tiêu chí con."}
             </p>
             
-            <div className="grid grid-cols-2 gap-4">
+            {/* Simplified form for leaf criteria - only criteriaType and maxScore */}
+            {formData.isLeaf ? (
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="criteriaType">Loại tiêu chí *</Label>
+                  <Select 
+                    value={formData.criteriaType.toString()} 
+                    onValueChange={(v) => setFormData({ ...formData, criteriaType: parseInt(v) })}
+                  >
+                    <SelectTrigger data-testid="select-criteria-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">Định lượng</SelectItem>
+                      <SelectItem value="2">Định tính</SelectItem>
+                      <SelectItem value="3">Chấm thẳng</SelectItem>
+                      <SelectItem value="4">Cộng/Trừ điểm</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div>
+                  <Label htmlFor="maxScore">Điểm tối đa *</Label>
+                  <Input
+                    id="maxScore"
+                    type="number"
+                    step="0.01"
+                    value={formData.maxScore}
+                    onChange={(e) => setFormData({ ...formData, maxScore: e.target.value })}
+                    data-testid="input-max-score"
+                  />
+                </div>
+                
+                {/* Help text explaining each criteria type */}
+                {formData.criteriaType === 1 && (
+                  <div className="p-4 bg-blue-50 dark:bg-blue-950 rounded-lg space-y-2">
+                    <h4 className="font-semibold text-blue-900 dark:text-blue-100">Tiêu chí định lượng</h4>
+                    <p className="text-sm text-blue-800 dark:text-blue-200">
+                      Người dùng nhập <strong>giá trị thực tế đạt được</strong>, hệ thống tự động tính điểm dựa trên chỉ tiêu đã giao.
+                    </p>
+                    <div className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
+                      <div><strong>Công thức tính:</strong> Điểm = (Giá trị đạt được / Chỉ tiêu) × Điểm tối đa</div>
+                      <div className="pl-4">
+                        <div>• Ví dụ: Chỉ tiêu 100 vụ, đạt 80 vụ → 80% → Được {(0.8 * parseFloat(formData.maxScore || '0')).toFixed(2)}/{formData.maxScore} điểm</div>
+                        <div>• Ví dụ: Chỉ tiêu 100 vụ, đạt 120 vụ → 120% → Được {(1.2 * parseFloat(formData.maxScore || '0')).toFixed(2)} điểm <strong>(vượt chỉ tiêu!)</strong></div>
+                        <div>• Điểm có thể vượt mức tối đa nếu hoàn thành vượt chỉ tiêu</div>
+                      </div>
+                    </div>
+                    <p className="text-xs text-blue-600 dark:text-blue-400 italic">
+                      Lưu ý: Admin cần giao chỉ tiêu cho từng đơn vị trước khi chấm điểm
+                    </p>
+                  </div>
+                )}
+                
+                {formData.criteriaType === 2 && (
+                  <div className="p-4 bg-green-50 dark:bg-green-950 rounded-lg space-y-2">
+                    <h4 className="font-semibold text-green-900 dark:text-green-100">Tiêu chí định tính</h4>
+                    <p className="text-sm text-green-800 dark:text-green-200">
+                      Người dùng chỉ cần chọn <strong>Đạt</strong> hoặc <strong>Không đạt</strong>, hệ thống tự động tính điểm.
+                    </p>
+                    <div className="text-sm text-green-700 dark:text-green-300 space-y-1">
+                      <div>• Đạt → Nhận điểm tối đa: <strong>{formData.maxScore} điểm</strong></div>
+                      <div>• Không đạt → <strong>0 điểm</strong></div>
+                    </div>
+                  </div>
+                )}
+                
+                {formData.criteriaType === 3 && (
+                  <div className="p-4 bg-purple-50 dark:bg-purple-950 rounded-lg space-y-2">
+                    <h4 className="font-semibold text-purple-900 dark:text-purple-100">Tiêu chí chấm thẳng</h4>
+                    <p className="text-sm text-purple-800 dark:text-purple-200">
+                      Người dùng tự nhập điểm và có thể đính kèm file minh chứng.
+                    </p>
+                    <div className="text-sm text-purple-700 dark:text-purple-300 space-y-1">
+                      <div>• Điểm nhập vào: từ 0 đến {formData.maxScore} điểm</div>
+                      <div>• Có thể upload file đính kèm (PDF, hình ảnh, v.v.)</div>
+                      <div>• Ví dụ: Hoàn thành xuất sắc nhiệm vụ A → Tự chấm 9/{formData.maxScore} điểm</div>
+                    </div>
+                  </div>
+                )}
+                
+                {formData.criteriaType === 4 && (
+                  <div className="p-4 bg-amber-50 dark:bg-amber-950 rounded-lg space-y-2">
+                    <h4 className="font-semibold text-amber-900 dark:text-amber-100">Tiêu chí cộng/trừ điểm</h4>
+                    <p className="text-sm text-amber-800 dark:text-amber-200">
+                      Người dùng tự nhập điểm (có thể âm) và có thể đính kèm file minh chứng.
+                    </p>
+                    <div className="text-sm text-amber-700 dark:text-amber-300 space-y-1">
+                      <div>• Điểm cộng: giá trị dương (VD: +5 điểm)</div>
+                      <div>• Điểm trừ: giá trị âm (VD: -3 điểm)</div>
+                      <div>• Có thể upload file đính kèm minh chứng</div>
+                      <div>• Ví dụ: Sáng kiến được khen thưởng → +{formData.maxScore} điểm</div>
+                      <div>• Ví dụ: Vi phạm kỷ luật → -{formData.maxScore} điểm</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
               <div>
                 <Label htmlFor="maxScore">Điểm tối đa *</Label>
                 <Input
@@ -436,182 +510,11 @@ export default function CriteriaManagementPage() {
                   step="0.01"
                   value={formData.maxScore}
                   onChange={(e) => setFormData({ ...formData, maxScore: e.target.value })}
+                  data-testid="input-max-score"
                 />
-              </div>
-              
-              {formData.isLeaf && (
-                <div>
-                  <Label htmlFor="criteriaType">Loại tiêu chí *</Label>
-                  <Select 
-                    value={formData.criteriaType.toString()} 
-                    onValueChange={(v) => setFormData({ ...formData, criteriaType: parseInt(v) })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">Định lượng (có công thức)</SelectItem>
-                      <SelectItem value="2">Định tính (đạt/không đạt)</SelectItem>
-                      <SelectItem value="3">Chấm thẳng (điểm/lần)</SelectItem>
-                      <SelectItem value="4">Cộng/Trừ điểm</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div>
-            
-            {/* Type-specific fields - only show for leaf criteria */}
-            {formData.isLeaf && formData.criteriaType === 2 && (
-              <div className="p-4 bg-green-50 rounded-lg">
-                <h4 className="font-semibold text-green-900">Tiêu chí định tính</h4>
-                <p className="text-sm text-green-700 mt-2">
-                  Khi chấm điểm, chỉ cần chọn <strong>Đạt</strong> hoặc <strong>Không đạt</strong>.
-                  <br />
-                  - Đạt: nhận điểm tối đa ({formData.maxScore} điểm)
-                  <br />
-                  - Không đạt: 0 điểm
+                <p className="text-xs text-muted-foreground mt-1">
+                  Điểm tối đa của tiêu chí cha sẽ bằng tổng điểm các tiêu chí con
                 </p>
-              </div>
-            )}
-            
-            {formData.isLeaf && formData.criteriaType === 1 && (
-              <div className="space-y-4 p-4 bg-blue-50 rounded-lg">
-                <h4 className="font-semibold text-blue-900">Chi tiết định lượng</h4>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="formulaType">Loại công thức *</Label>
-                    <Select 
-                      value={formData.formulaType.toString()} 
-                      onValueChange={(v) => setFormData({ ...formData, formulaType: parseInt(v) })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1">Không đạt chỉ tiêu (&lt;100%)</SelectItem>
-                        <SelectItem value="2">Đạt đủ chỉ tiêu (100%)</SelectItem>
-                        <SelectItem value="3">Dẫn đầu cụm</SelectItem>
-                        <SelectItem value="4">Vượt nhưng không dẫn đầu</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div>
-                    <Label htmlFor="defaultTarget">Chỉ tiêu mặc định</Label>
-                    <Input
-                      id="defaultTarget"
-                      type="number"
-                      value={formData.defaultTarget}
-                      onChange={(e) => setFormData({ ...formData, defaultTarget: e.target.value })}
-                    />
-                  </div>
-                </div>
-                
-                <div>
-                  <Label htmlFor="unit">Đơn vị tính</Label>
-                  <Input
-                    id="unit"
-                    value={formData.unit}
-                    onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                    placeholder="VD: %, vụ, lần, người..."
-                  />
-                </div>
-              </div>
-            )}
-            
-            {formData.isLeaf && formData.criteriaType === 3 && (
-              <div className="space-y-4 p-4 bg-purple-50 rounded-lg">
-                <h4 className="font-semibold text-purple-900">Chi tiết chấm thẳng</h4>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="pointPerUnit">Điểm/lần *</Label>
-                    <Input
-                      id="pointPerUnit"
-                      type="number"
-                      step="0.01"
-                      value={formData.pointPerUnit}
-                      onChange={(e) => setFormData({ ...formData, pointPerUnit: e.target.value })}
-                      placeholder="VD: 2.5"
-                    />
-                  </div>
-                  
-                  <div>
-                    <Label htmlFor="maxScoreLimit">Giới hạn điểm tối đa</Label>
-                    <Input
-                      id="maxScoreLimit"
-                      type="number"
-                      step="0.01"
-                      value={formData.maxScoreLimit}
-                      onChange={(e) => setFormData({ ...formData, maxScoreLimit: e.target.value })}
-                    />
-                  </div>
-                </div>
-                
-                <div>
-                  <Label htmlFor="unit">Đơn vị</Label>
-                  <Input
-                    id="unit"
-                    value={formData.unit}
-                    onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                    placeholder="VD: lần, người, ..."
-                  />
-                </div>
-              </div>
-            )}
-            
-            {formData.isLeaf && formData.criteriaType === 4 && (
-              <div className="space-y-4 p-4 bg-orange-50 rounded-lg">
-                <h4 className="font-semibold text-orange-900">Chi tiết cộng/trừ điểm</h4>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="bonusPoint">Điểm cộng/lần</Label>
-                    <Input
-                      id="bonusPoint"
-                      type="number"
-                      step="0.01"
-                      value={formData.bonusPoint}
-                      onChange={(e) => setFormData({ ...formData, bonusPoint: e.target.value })}
-                    />
-                  </div>
-                  
-                  <div>
-                    <Label htmlFor="penaltyPoint">Điểm trừ/lần</Label>
-                    <Input
-                      id="penaltyPoint"
-                      type="number"
-                      step="0.01"
-                      value={formData.penaltyPoint}
-                      onChange={(e) => setFormData({ ...formData, penaltyPoint: e.target.value })}
-                    />
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="minScore">Điểm tối thiểu</Label>
-                    <Input
-                      id="minScore"
-                      type="number"
-                      step="0.01"
-                      value={formData.minScore}
-                      onChange={(e) => setFormData({ ...formData, minScore: e.target.value })}
-                    />
-                  </div>
-                  
-                  <div>
-                    <Label htmlFor="maxScoreBonus">Điểm tối đa</Label>
-                    <Input
-                      id="maxScoreBonus"
-                      type="number"
-                      step="0.01"
-                      value={formData.maxScoreBonus}
-                      onChange={(e) => setFormData({ ...formData, maxScoreBonus: e.target.value })}
-                    />
-                  </div>
-                </div>
               </div>
             )}
           </div>

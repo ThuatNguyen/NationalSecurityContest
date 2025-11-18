@@ -82,38 +82,11 @@ export function setupCriteriaTreeRoutes(app: Express) {
         });
       }
       
-      // Only validate details for leaf nodes (criteriaType > 0)
-      if (criteria.criteriaType === 0) {
-        // Parent node - no need to validate details
-        // Score will be auto-calculated from children
-      } else if (criteria.criteriaType === 1) {
-        // Validate formula_type for quantitative
-        if (!criteria.formulaType || ![1, 2, 3, 4].includes(criteria.formulaType)) {
-          return res.status(400).json({ 
-            message: "Tiêu chí định lượng phải có formula_type (1-4)" 
-          });
-        }
-        if (!details?.formula) {
-          return res.status(400).json({ 
-            message: "Tiêu chí định lượng phải có thông tin công thức" 
-          });
-        }
-      } else if (criteria.criteriaType === 3) {
-        // Validate details for fixed score
-        if (!details?.fixedScore) {
-          return res.status(400).json({ 
-            message: "Tiêu chí chấm thẳng phải có thông tin pointPerUnit" 
-          });
-        }
-      } else if (criteria.criteriaType === 4) {
-        // Validate details for bonus/penalty
-        if (!details?.bonusPenalty) {
-          return res.status(400).json({ 
-            message: "Tiêu chí +/- phải có thông tin bonusPoint hoặc penaltyPoint" 
-          });
-        }
-      }
-      // criteriaType === 2 (qualitative) needs no extra validation
+      // Simplified validation: details are now optional for all types
+      // Type 1: Auto-calculation uses criteriaTargets table
+      // Type 2: No config needed (binary đạt/không đạt)
+      // Type 3 & 4: User enters score directly, no formula needed
+      // Details parameter is optional and can be undefined
       
       const newCriteria = await criteriaTreeStorage.createCriteria(criteria, details);
       res.status(201).json(newCriteria);
